@@ -9,6 +9,8 @@ import { uid, todayStr, fmtDate, AR_DAYS, cx } from '../lib/helpers'
 import { circleById, userById, parentOf } from '../lib/analytics'
 import { compressImage } from '../lib/photo'
 import { drawStudentCard, studentCardPNG } from '../lib/studentcard'
+import { newTeacherCode } from '../lib/license'
+import { Copy } from 'lucide-react'
 
 export default function Circles({ teacherMode = false }) {
   const { db, update, deleteRecord, restoreArchived } = useStore()
@@ -75,7 +77,8 @@ export default function Circles({ teacherMode = false }) {
         Object.assign(d.users.find((u) => u.id === form.id), form)
       } else {
         const id = uid()
-        d.users.push({ id, name: form.name, email: form.email, phone: form.phone || '', password: form.password || '123456', role: 'teacher', status: 'active', photo: form.photo || '', circleId: null, createdAt: new Date().toISOString() })
+        const teacherCode = newTeacherCode()
+        d.users.push({ id, name: form.name, email: form.email, phone: form.phone || '', password: form.password || '123456', role: 'teacher', status: 'active', photo: form.photo || '', circleId: null, teacherCode, createdAt: new Date().toISOString() })
         const reg = JSON.parse(localStorage.getItem('kand_registry_v1') || '{"schools":[],"users":[]}')
         reg.users.push({ schoolId: d.settings.schoolId, userId: id, identifier: form.email, phone: form.phone || '', role: 'teacher', name: form.name })
         localStorage.setItem('kand_registry_v1', JSON.stringify(reg))
@@ -195,7 +198,7 @@ export default function Circles({ teacherMode = false }) {
           {teachers.length === 0 ? (
             <Empty icon={GraduationCap} title="لا يوجد معلمون بعد" hint="أضف معلماًrect أس Gijzelobrevb " />
           ) : (
-            <Table columns={['المعلم', 'البريد', 'الهاتف', 'الحالة', 'إجراءات']}>
+            <Table columns={['المعلم', 'كود المعلم', 'البريد', 'الهاتف', 'الحالة', 'إجراءات']}>
               {teachers.map((t) => (
                 <tr key={t.id} className="hover:bg-card2 transition-colors">
                   <td className="td">
@@ -203,6 +206,22 @@ export default function Circles({ teacherMode = false }) {
                       {t.photo ? <img src={t.photo} alt="" className="w-9 h-9 rounded-lg object-cover border border-line" /> : <div className="w-9 h-9 rounded-lg bg-teal2/10 border border-teal2/25 text-teal2 flex items-center justify-center text-xs font-bold">{t.name.charAt(0)}</div>}
                       <span className="font-semibold text-sm">{t.name}</span>
                     </div>
+                  </td>
+                  <td className="td">
+                    {t.teacherCode ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-bronze/10 border border-bronze/25 text-bronze px-2 py-1 text-xs font-bold tabular-nums" dir="ltr">
+                        {t.teacherCode}
+                        <button
+                          className="hover:text-accent"
+                          title="نسخ كود المعلم"
+                          onClick={() => { navigator.clipboard?.writeText(t.teacherCode); toast(`تم نسخ كود المعلم ${t.teacherCode}`) }}
+                        >
+                          <Copy size={11} />
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted">—</span>
+                    )}
                   </td>
                   <td className="td text-sm text-muted" dir="ltr">{t.email}</td>
                   <td className="td text-sm text-muted tabular-nums" dir="ltr">{t.phone || '—'}</td>

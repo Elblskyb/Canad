@@ -8,6 +8,7 @@ export const schoolDbKey = (schoolId) => `kand_db_${schoolId}`
 export function buildSchoolDb(school) {
   return {
     version: 2,
+    schoolCode: school.code || '',
     settings: {
       schoolId: school.id,
       schoolName: school.name,

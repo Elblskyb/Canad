@@ -29,6 +29,9 @@ jobs:
         run: npm ci
 
       - name: Build web app
+        env:
+          VITE_SUPABASE_URL: https://hdnylwxvjmieuhybnjpk.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_In57otFBw63nuOUf62qDvQ_6l74Bnx-
         run: npm run build
 
       - name: Generate Android app icons from assets/icon.png (optional)

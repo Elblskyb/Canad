@@ -17,6 +17,7 @@
     "@capacitor/core": "^6.2.3",
     "@fontsource/amiri": "^5.1.0",
     "@fontsource/ibm-plex-sans-arabic": "^5.1.0",
+    "@supabase/supabase-js": "^2.119.2",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^2.5.2",
     "jszip": "^3.10.2",

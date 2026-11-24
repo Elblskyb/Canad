@@ -57,6 +57,16 @@ global.AudioContext = window.AudioContext
 global.fetch = () => Promise.reject(new Error('offline in test'))
 window.fetch = global.fetch
 window.URL.createObjectURL = () => 'blob:x'
+// Stub WebSocket so Supabase realtime never opens a socket in jsdom
+class FakeWebSocket {
+  constructor() { this.readyState = 0 }
+  send() {}
+  close() {}
+  addEventListener() {}
+  removeEventListener() {}
+}
+global.WebSocket = FakeWebSocket
+window.WebSocket = FakeWebSocket
 window.URL.revokeObjectURL = () => {}
 
 export function loadApp() {

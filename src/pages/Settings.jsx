@@ -184,32 +184,18 @@ export default function Settings() {
 
       <Card className="col-span-12 xl:col-span-6">
         <CardTitle
-          icon={Link2}
-          title="الربط السحابي المجاني (اختياري بالكامل)"
-          subtitle="Google Apps Script + Sheets/Drive — أو Firebase (خطة Spark المجانية). يمكن العمل بدونه 100% محلياً"
-          action={
-            <button className="btn-primary !py-2 !text-xs" onClick={() => setWizardOpen(true)}>
-              <Wand2 size={13} /> معالج ربط سريع
-            </button>
-          }
+          icon={Cloud}
+          title="المزامنة السحابية — أوتوماتيكية 100%"
+          subtitle="Supabase مدمج مباشرة في التطبيق (بدون Google Cloud Console أو أي إعداد يدوي) — Offline-First: يعمل بدون إنترنت ويتزامن تلقائياً عند عودة الاتصال"
         />
         <div className="flex flex-col gap-2.5">
-          <input className="input !text-xs" dir="ltr" placeholder="https://script.google.com/macros/s/xxxx/exec — ألصقه هنا لمرة واحدة فقط" value={gasUrl} onChange={(e) => setGasUrl(e.target.value)} />
-          <div className="flex flex-wrap gap-2">
-            <button className="btn-primary !py-2 !text-xs" onClick={saveGasUrl}>حفظ الرابط</button>
-            <button className="btn-ghost !py-2 !text-xs" onClick={testConnection} disabled={testing}>
-              <FlaskConical size={13} /> {testing ? 'جارٍ الاختبار...' : 'اختبار الاتصال'}
-            </button>
-            <button className="btn-ghost !py-2 !text-xs" onClick={() => setCodeOpen(true)}>
-              <Code2 size={13} /> عرض كود Code.gs
-            </button>
-            {store.mode === 'gas' ? <Badge tone="accent"><Cloud size={11} /> Sheets + Drive</Badge> : <Badge tone="neutral"><CloudOff size={11} /> محلي فقط</Badge>}
+          <div className="flex items-center gap-2 text-sm">
+            {store.remoteStatus === 'cloud' ? <Badge tone="accent"><Cloud size={11} /> متصل بالسحابة — Real-time</Badge> : <Badge tone="neutral"><CloudOff size={11} /> يعمل محلياً (سيُزامَن عند عودة الاتصال)</Badge>}
+            <span className="text-xs text-muted">لكل مدرسة school_id معزول في السحابة</span>
           </div>
-          {testResult && (
-            <p className={`text-xs rounded-lg px-3 py-2 border ${testResult.ok ? 'text-accent bg-accent/10 border-accent/25' : 'text-danger bg-danger/10 border-danger/25'}`}>
-              {testResult.ok ? 'الاتصال ناجح — تم قراءة البيانات من Google Sheets' : 'فشل: ' + (testResult.error || 'غير معروف')}
-            </p>
-          )}
+          <p className="text-xs text-muted leading-6">
+            لا حاجة لأي رابط أو سكربت: تسجيل المدرسة ينشئها في السحابة تلقائياً، Any تغيير في حضور/تسميع/7² synchronizes لحظياً بين هواتف المدير والمعلم والطالب.
+          </p>
         </div>
       </Card>
 

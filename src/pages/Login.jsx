@@ -116,14 +116,14 @@ export default function Login() {
 }
 
 function RegisterSchoolModal({ onClose, registerSchool }) {
-  const [form, setForm] = useState({ schoolName: '', adminName: '', identifier: '', phone: '', password: '' })
+  const [form, setForm] = useState({ schoolName: '', adminName: '', identifier: '', phone: '', password: '', licenseKey: '' })
   const [error, setError] = useState('')
   const [done, setDone] = useState(null)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
   const submit = () => {
-    if (!form.schoolName || !form.adminName || !form.identifier || !form.password) {
-      setError('املأ جميع الحقول المطلوبة')
+    if (!form.schoolName || !form.adminName || !form.identifier || !form.password || !form.licenseKey) {
+      setError('املأ جميع الحقول المطلوبة — كود التفعيل إلزامي')
       return
     }
     const res = registerSchool(form)
@@ -153,6 +153,10 @@ function RegisterSchoolModal({ onClose, registerSchool }) {
             <Field label="رقم الهاتف"><input className="input" dir="ltr" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="05xxxxxxxx" /></Field>
           </div>
           <Field label="كلمة المرور" required><input className="input" dir="ltr" type="password" value={form.password} onChange={(e) => set('password', e.target.value)} placeholder="••••••" /></Field>
+          <Field label="كود تفعيل المدرسة (License Key)" required>
+            <input className="input text-center tracking-widest tabular-nums" dir="ltr" placeholder="KAND-2026-XXXX" value={form.licenseKey} onChange={(e) => set('licenseKey', e.target.value)} />
+            <p className="text-[11px] text-muted mt-1">كود التفعيل يحدده صاحب التطبيق — بدونه لا يمكن إنشاء مدرسة</p>
+          </Field>
           {error && <p className="text-sm text-danger bg-danger/10 border border-danger/25 rounded-xl px-4 py-2.5">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button className="btn-ghost" onClick={onClose}>إلغاء</button>
@@ -191,7 +195,7 @@ function RegisterStudentModal({ onClose, registerStudent }) {
   }
 
   return (
-    <Modal open onClose={onClose} title="إنشاء حساب طالب جديد" subtitle="أدخل رمز المدرسة الذي يعطيه لك مدير المدرسة" icon={UserPlus} wide>
+    <Modal open onClose={onClose} title="إنشاء حساب طالب جديد" subtitle="أدخل كود المعلم (TCH-XXXX) الذي يظهر في ملف المعلم — سيرتبط حسابك بمدرسته وحلقته تلقائياً" icon={UserPlus} wide>
       {ok ? (
         <div className="flex flex-col items-center gap-3 py-4 text-center">
           <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/25 text-accent flex items-center justify-center"><UserPlus size={26} /></div>
@@ -201,8 +205,8 @@ function RegisterStudentModal({ onClose, registerStudent }) {
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">
-          <Field label="رمز المدرسة (School Code)" required>
-            <input className="input text-center tracking-[0.3em] tabular-nums" dir="ltr" placeholder="XXXXXX" value={form.code} onChange={(e) => set('code', e.target.value)} />
+          <Field label="كود المعلم (Teacher Code)" required>
+            <input className="input text-center tracking-[0.3em] tabular-nums" dir="ltr" placeholder="TCH-1042" value={form.code} onChange={(e) => set('code', e.target.value)} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="اسم الطالب" required><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="الاسم الكامل" /></Field>

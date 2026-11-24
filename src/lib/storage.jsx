@@ -1,6 +1,9 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { buildSchoolDb, loadRegistry, saveRegistry, schoolDbKey, REGISTRY_KEY, SESSION_KEY, newSchoolCode, newSchoolId } from './seed'
 import { uid, todayStr } from './helpers'
+import { idbGet, idbSet } from './idb'
+import { supabase, pushSchool, pullSchool, subscribeSchool, cloudValidateLicense, cloudCreateSchool, cloudFindTeacherByCode, cloudSchoolByCode } from './cloud'
+import { isValidLicenseKey, newTeacherCode } from './license'
 
 /* ---------- GAS fetch: إصلاح Failed to fetch عبر redirect follow + text/plain ---------- */
 const gasPost = (url, body) =>
@@ -15,7 +18,19 @@ const withTimeout = (promise, ms) =>
   Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
 
 export const StorageService = {
-  loadSchool(schoolId) {
+  loadSchoolSync(schoolId) {
+    try {
+      const raw = localStorage.getItem(schoolDbKey(schoolId))
+      if (raw) return JSON.parse(raw)
+    } catch (e) { /* reseed */ }
+    const reg = loadRegistry()
+    const school = reg.schools.find((s) => s.id === schoolId)
+    return buildSchoolDb(school || { id: schoolId, name: 'مدرسة' })
+  },
+  async loadSchool(schoolId) {
+    // Offline-first: IndexedDB أولاً، ثم localStorage كاحتياط
+    const fromIdb = await idbGet(schoolDbKey(schoolId))
+    if (fromIdb) return fromIdb
     try {
       const raw = localStorage.getItem(schoolDbKey(schoolId))
       if (raw) return JSON.parse(raw)
@@ -27,9 +42,12 @@ export const StorageService = {
     return db
   },
   saveSchool(schoolId, db) {
+    idbSet(schoolDbKey(schoolId), db) // IndexedDB primary (no localStorage quota issues)
     try {
       localStorage.setItem(schoolDbKey(schoolId), JSON.stringify(db))
-    } catch (e) { /* quota */ }
+    } catch (e) {
+      try { localStorage.removeItem(schoolDbKey(schoolId)) } catch (e2) { /* ignore */ }
+    }
     const gasUrl = db?.settings?.gasUrl
     if (gasUrl) this.pushRemote(gasUrl, db).catch(() => {})
   },
@@ -77,12 +95,61 @@ const StoreContext = createContext(null)
 export function StoreProvider({ children }) {
   const { session } = useSession()
   const schoolId = session?.schoolId || null
-  const [db, setDb] = useState(() => (schoolId ? StorageService.loadSchool(schoolId) : null))
+  const [db, setDb] = useState(null)
   const [remoteStatus, setRemoteStatus] = useState('local')
+  const pushTimer = useRef(null)
+  const unsubRef = useRef(null)
 
   useEffect(() => {
-    setDb(schoolId ? StorageService.loadSchool(schoolId) : null)
+    let cancelled = false
+    if (!schoolId) {
+      setDb(null)
+      return
+    }
+    // Offline-first: load local instantly, then pull cloud + subscribe realtime
+    StorageService.loadSchool(schoolId).then((local) => {
+      if (cancelled) return
+      setDb(local)
+      if (supabase) {
+        setRemoteStatus('syncing')
+        pullSchool(schoolId).then((cloud) => {
+          if (cancelled || !cloud) {
+            setRemoteStatus('cloud')
+            return
+          }
+          setDb((prev) => {
+            const merged = { ...prev, ...cloud, settings: { ...cloud.settings, ...prev?.settings, schoolId, gasUrl: prev?.settings?.gasUrl || '' } }
+            StorageService.saveSchool(schoolId, merged)
+            return merged
+          })
+          setRemoteStatus('cloud')
+        })
+        unsubRef.current = subscribeSchool(schoolId, () => {
+          pullSchool(schoolId).then((cloud) => {
+            if (cloud) {
+              setDb((prev) => (prev ? { ...prev, ...cloud, settings: { ...cloud.settings, ...prev.settings, schoolId } } : prev))
+            }
+          })
+        })
+      } else {
+        setRemoteStatus('local')
+      }
+    })
+    return () => {
+      cancelled = true
+      if (unsubRef.current) unsubRef.current()
+    }
   }, [schoolId])
+
+  // Auto-sync to cloud (debounced) after every local update
+  useEffect(() => {
+    if (!db || !supabase) return
+    if (pushTimer.current) clearTimeout(pushTimer.current)
+    pushTimer.current = setTimeout(() => {
+      pushSchool(db).then((ok) => setRemoteStatus(ok ? 'cloud' : 'local-fallback'))
+    }, 800)
+    return () => clearTimeout(pushTimer.current)
+  }, [db])
 
   const update = useCallback(
     (mutator) => {
@@ -255,7 +322,7 @@ export function AuthProvider({ children }) {
       const id = String(identifier).trim().toLowerCase()
       const entry = reg.users.find((u) => (u.identifier && u.identifier.toLowerCase() === id) || (u.phone && u.phone.replace(/\D/g, '') === id.replace(/\D/g, '')))
       if (!entry) return { ok: false, error: 'لا يوجد حساب بهذا البريد أو رقم الهاتف — سجّل مدرسة أو حساب طالب أولاً' }
-      const schoolDb = StorageService.loadSchool(entry.schoolId)
+      const schoolDb = StorageService.loadSchoolSync(entry.schoolId)
       const u = schoolDb.users.find((x) => x.id === entry.userId)
       if (!u || u.password !== password) return { ok: false, error: 'كلمة المرور غير صحيحة' }
       if (u.status === 'suspended') return { ok: false, error: 'تم إيقاف هذا الحساب — تواصل مع مدير المدرسة' }
@@ -266,11 +333,15 @@ export function AuthProvider({ children }) {
   )
 
   const registerSchool = useCallback(
-    ({ schoolName, adminName, identifier, phone, password }) => {
+    ({ schoolName, adminName, identifier, phone, password, licenseKey }) => {
+      const key = String(licenseKey || '').trim().toUpperCase()
+      if (!isValidLicenseKey(key)) {
+        return { ok: false, error: 'كود التفعيل غير صالح — اطلب كود التفعيل (License Key) من صاحب التطبيق' }
+      }
       const reg = loadRegistry()
       const id = String(identifier).trim().toLowerCase()
       if (reg.users.some((u) => u.identifier?.toLowerCase() === id)) return { ok: false, error: 'هذا البريد مسجّل مسبقاً' }
-      const school = { id: newSchoolId(), name: schoolName.trim(), code: newSchoolCode(), createdAt: new Date().toISOString(), adminName: adminName.trim() }
+      const school = { id: newSchoolId(), name: schoolName.trim(), code: newSchoolCode(), licenseKey: key, createdAt: new Date().toISOString(), adminName: adminName.trim() }
       const schoolDb = buildSchoolDb(school)
       const userId = uid()
       schoolDb.users.push({ id: userId, name: adminName.trim(), email: id, phone: phone || '', password, role: 'admin', status: 'active', photo: '', createdAt: new Date().toISOString() })
@@ -278,6 +349,9 @@ export function AuthProvider({ children }) {
       reg.users.push({ schoolId: school.id, userId, identifier: id, phone: phone || '', role: 'admin', name: adminName.trim() })
       saveRegistry(reg)
       StorageService.saveSchool(school.id, schoolDb)
+      cloudCreateSchool({ id: school.id, name: school.name, code: school.code, licenseKey: key, adminName: school.adminName }).then((ok) => {
+        if (ok) pushSchool(schoolDb)
+      })
       setSession({ userId, schoolId: school.id, at: new Date().toISOString() })
       return { ok: true, school }
     },
@@ -287,9 +361,23 @@ export function AuthProvider({ children }) {
   const registerStudent = useCallback(
     ({ code, name, birthDate, parentName, parentPhone, password, photo }) => {
       const reg = loadRegistry()
-      const school = reg.schools.find((s) => s.code === String(code).trim().toUpperCase())
-      if (!school) return { ok: false, error: 'رمز المدرسة غير صحيح — اطلب الرمز من مدير المدرسة' }
-      const schoolDb = StorageService.loadSchool(school.id)
+      const input = String(code || '').trim().toUpperCase()
+      // Accept teacher code (TCH-XXXX) or school code
+      let school = reg.schools.find((s) => s.code === input)
+      let circleId = null
+      if (!school && input.startsWith('TCH-')) {
+        for (const s of reg.schools) {
+          const d = StorageService.loadSchoolSync(s.id)
+          const t = d.users.find((u) => u.role === 'teacher' && u.teacherCode === input)
+          if (t) {
+            school = s
+            circleId = d.circles.find((c) => c.teacherId === t.id)?.id || null
+            break
+          }
+        }
+      }
+      if (!school) return { ok: false, error: 'الكود غير صحيح — أدخل كود المعلم (TCH-XXXX) أو كود المدرسة' }
+      const schoolDb = StorageService.loadSchoolSync(school.id)
       const phoneDigits = String(parentPhone || '').replace(/\D/g, '')
       let parent = schoolDb.users.find((u) => u.role === 'parent' && u.phone && u.phone.replace(/\D/g, '') === phoneDigits)
       let parentId
@@ -304,7 +392,7 @@ export function AuthProvider({ children }) {
       const userId = 'usr-' + sid
       schoolDb.users.push({ id: userId, name: name.trim(), email: '', phone: '', password, role: 'student', status: 'active', studentId: sid, photo: photo || '', createdAt: new Date().toISOString() })
       reg.users.push({ schoolId: school.id, userId, identifier: '', phone: phoneDigits, role: 'student', name: name.trim() })
-      schoolDb.students.push({ id: sid, userId, name: name.trim(), birthDate: birthDate || '', circleId: null, parentId, qrCode: `KAND-${sid.toUpperCase()}`, photo: photo || '', joinedAt: todayStr(), createdAt: new Date().toISOString() })
+      schoolDb.students.push({ id: sid, userId, name: name.trim(), birthDate: birthDate || '', circleId: circleId || null, parentId, qrCode: `KAND-${sid.toUpperCase()}`, photo: photo || '', joinedAt: todayStr(), createdAt: new Date().toISOString() })
       saveRegistry(reg)
       StorageService.saveSchool(school.id, schoolDb)
       return { ok: true, school }

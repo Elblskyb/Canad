@@ -14,6 +14,7 @@ async function registerSchool() {
   setInput(mInput('الاسم الكامل'), 'مدير 2')
   setInput(mInput('admin@school.com'), 'admin2@test.school')
   setInput(mInput('05xxxxxxxx'), '0500000010')
+  setInput(mInput('KAND-2026-XXXX'), 'KAND-2026-DEMO1')
   setInput(mPassword(), 'pass123')
   clickByText('إنشاء المدرسة')
   await sleep(700)
@@ -159,7 +160,7 @@ setInput(loginIdentifier(), schoolCode()) // wrong identifier on purpose? no—u
 // register student first
 clickByText('إنشاء حساب طالب جديد')
 await sleep(500)
-setInput(mInput('XXXXXX'), schoolCode())
+setInput(mInput('TCH-1042'), db().users.find((u) => u.role === 'teacher').teacherCode)
 setInput(mInput('الاسم الكامل'), 'طالب إشعارات')
 setInput(mInput('05xxxxxxxx'), '0500000077')
 setInput(mPassword(), 's12345')

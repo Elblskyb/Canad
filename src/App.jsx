@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { SessionProvider, StoreProvider, AuthProvider, useAuth, useStore } from './lib/storage'
 import { ToastProvider, Modal } from './components/ui'
+import ErrorBoundary from './components/ErrorBoundary'
 import { Shell, roleLabel } from './components/layout'
 import { BellRing, CheckCircle2 } from 'lucide-react'
 import Login from './pages/Login'
@@ -132,7 +133,9 @@ export default function App() {
       <StoreProvider>
         <AuthProvider>
           <ToastProvider>
-            <Root />
+            <ErrorBoundary>
+              <Root />
+            </ErrorBoundary>
           </ToastProvider>
         </AuthProvider>
       </StoreProvider>
