@@ -19,6 +19,19 @@ export const supabase =
 
 export const cloudEnabled = () => !!supabase
 
+/* آخر خطأ تقني من السحابة — يُعرض في واجهة الإعدادات عند فشل المزامنة */
+export const cloudDiag = { lastError: '' }
+
+const errText = (e) => {
+  if (!e) return 'خطأ غير معروف'
+  const parts = [e.message || String(e)]
+  if (e.code) parts.push('code=' + e.code)
+  if (e.status) parts.push('status=' + e.status)
+  if (e.details) parts.push(String(e.details).slice(0, 200))
+  if (e.hint) parts.push(String(e.hint).slice(0, 200))
+  return parts.join(' | ')
+}
+
 /* ---------- Mapping camelCase ↔ snake_case ---------- */
 const TABLES = {
   users: 'users',
@@ -65,10 +78,13 @@ const fromRow = (row) => {
 
 /* ---------- Push: رفع db كامل لمدرسة ---------- */
 export async function pushSchool(db) {
-  if (!supabase || !db?.settings?.schoolId) return false
+  if (!supabase || !db?.settings?.schoolId) {
+    cloudDiag.lastError = supabase ? 'معرّف المدرسة غير موجود' : 'عميل السحابة غير مهيأ (لا توجد مفاتيح اتصال)'
+    return false
+  }
   const schoolId = db.settings.schoolId
   try {
-    await supabase.from('schools').upsert(
+    const { error: schoolErr } = await supabase.from('schools').upsert(
       {
         id: schoolId,
         name: db.settings.schoolName,
@@ -78,14 +94,17 @@ export async function pushSchool(db) {
       },
       { onConflict: 'id' },
     )
+    if (schoolErr) throw schoolErr
     for (const [localKey, table] of Object.entries(TABLES)) {
       const rows = (db[localKey] || []).map((o) => toRow(schoolId, table, o))
       if (!rows.length) continue
       const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' })
-      if (error) throw error
+      if (error) throw new Error(`جدول ${table}: ${errText(error)}`)
     }
+    cloudDiag.lastError = ''
     return true
   } catch (e) {
+    cloudDiag.lastError = errText(e)
     return false
   }
 }
@@ -103,6 +122,7 @@ export async function pullSchool(schoolId) {
     const { data: schoolRow } = await supabase.from('schools').select('*').eq('id', schoolId).maybeSingle()
     return { ...out, school: schoolRow }
   } catch (e) {
+    cloudDiag.lastError = errText(e)
     return null
   }
 }

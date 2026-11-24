@@ -15,6 +15,7 @@ export default function Settings() {
   const [schoolName, setSchoolName] = useState(db.settings.schoolName)
   const [delBackup, setDelBackup] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [syncError, setSyncError] = useState('')
   const fileRef = useRef(null)
   const zipRef = useRef(null)
 
@@ -141,17 +142,22 @@ export default function Settings() {
               : <Badge tone="neutral"><CloudOff size={11} /> وضع بدون إنترنت — سيتم الحفظ فور توفر الشبكة</Badge>}
           </div>
           <p className="text-xs text-muted leading-6">
-            كل تغيير في الحضور أو التتسميع أو الطلاب يصل فوراً إلى جميع الأجهزة — يعمل التطبيق بدون إنترنت ويتزامن تلقائياً عند عودة الاتصال.
+            كل تغيير في الحضور أو التسميع أو الطلاب يصل فوراً إلى جميع الأجهزة — يعمل التطبيق بدون إنترنت ويتزامن تلقائياً عند عودة الاتصال.
           </p>
           <button className="btn-primary w-fit !py-2 !text-xs" onClick={async () => {
             setBusy(true)
-            const { pushSchool } = await import('../lib/cloud')
+            setSyncError('')
+            const { pushSchool, cloudDiag } = await import('../lib/cloud')
             const ok = await pushSchool(db)
             setBusy(false)
+            if (!ok) setSyncError(cloudDiag.lastError || 'تعذر الوصول إلى السحابة')
             toast(ok ? 'تمت مزامنة البيانات مع السحابة بنجاح' : 'تعذر الوصول إلى السحابة الآن — البيانات محفوظة محلياً وسيتم الحفظ تلقائياً', ok ? 'success' : 'info')
           }} disabled={busy}>
             <Cloud size={13} /> {busy ? 'جاري المزامنة...' : 'مزامنة البيانات الآن'}
           </button>
+          {syncError && (
+            <p className="text-[11px] text-danger leading-5 rounded-xl border border-danger/25 bg-danger/10 px-3 py-2 break-all" dir="ltr">{syncError}</p>
+          )}
         </div>
       </Card>
 
