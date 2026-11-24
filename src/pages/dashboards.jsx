@@ -237,7 +237,7 @@ export function TeacherDashboard({ go }) {
       </div>
 
       <div className="col-span-12 flex flex-wrap gap-2.5">
-        <button className="btn-primary" onClick={() => go('attendance')}><QrCode size={16} /> تسجيل الحضور بالـ QR</button>
+        <button className="btn-primary" onClick={() => go('attendance')}><QrCode size={16} /> تسجيل الحضور بالمسح</button>
         <button className="btn-ghost" onClick={() => go('recitations')}><BookOpen size={16} /> إدخال التسميع اليومي</button>
         <button className="btn-ghost" onClick={() => go('exams')}><ScanLine size={16} /> إعداد اختبار جديد</button>
         <button className="btn-bronze" onClick={() => go('certificates')}><Award size={16} /> تكريم المتميزين</button>
@@ -248,7 +248,7 @@ export function TeacherDashboard({ go }) {
         open={safeReset}
         onClose={() => setSafeReset(false)}
         title="تهيئة بيانات حلقاتك"
-        message="سيتم أولاً رفع نسخة احتياطية كاملة صامتة (إلى Drive إن وُجد ربط، وإلا محلياً)، ثم إشعار مدير المدرسة، وبعد نجاح الحفظ فقط يتم تصفير سجلات التسميع والحضور والاختبارات الخاصة بحلقاتك."
+        message="سيتم أولاً رفع نسخة احتياطية كاملة صامتة (إلى النسخة السحابية، وإلا محلياً)، ثم إشعار مدير المدرسة، وبعد نجاح الحفظ فقط يتم تصفير سجلات التسميع والحضور والاختبارات الخاصة بحلقاتك."
         confirmLabel={resetting ? 'جارٍ الحفظ الصامت...' : 'حفظ صامت ثم تهيئة'}
         danger
         requireDouble
@@ -387,7 +387,7 @@ export function StudentDashboard({ go }) {
       </div>
 
       <Card className="col-span-12 xl:col-span-7">
-        <CardTitle icon={TrendingUp} title="تطور الحفظ — الشهر الحالي" subtitle="الصفحات التراكمية عبر sessions أيام الشهر" />
+        <CardTitle icon={TrendingUp} title="تطور الحفظ — الشهر الحالي" subtitle="الصفحات التراكمية عبر أيام الشهر" />
         <div className="h-60">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={series.byDayPages} margin={{ top: 6, left: -20 }}>
@@ -584,7 +584,7 @@ export function ParentDashboard({ go }) {
           </Card>
 
           <Card className="col-span-12">
-            <CardTitle icon={Clock} title="سجل تأكيدات الاطلاع" subtitle="آخرuisine huit تأكيدات قمت بها" />
+            <CardTitle icon={Clock} title="سجل تأكيدات الاطلاع" subtitle="آخر تأكيدات القراءة" />
             {myLogs.length === 0 ? <Empty title="لم تقم بأي تأكيد بعد" hint="اضغط «تأكيد الاطلاع والمتابعة» في الأعلى" /> : (
               <div className="flex flex-wrap gap-2">
                 {myLogs.map((l) => (

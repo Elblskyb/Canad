@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { buildSchoolDb, loadRegistry, saveRegistry, schoolDbKey, REGISTRY_KEY, SESSION_KEY, newSchoolCode, newSchoolId } from './seed'
-import { uid, todayStr } from './helpers'
+import { uid, todayStr, normalizePhone, isPhoneLike } from './helpers'
 import { idbGet, idbSet } from './idb'
-import { supabase, pushSchool, pullSchool, subscribeSchool, cloudValidateLicense, cloudCreateSchool, cloudFindTeacherByCode, cloudSchoolByCode } from './cloud'
+import { supabase, pushSchool, pullSchool, subscribeSchool, cloudValidateLicense, cloudCreateSchool, cloudFindTeacherByCode, cloudSchoolByCode, cloudFindUser } from './cloud'
 import { isValidLicenseKey, newTeacherCode } from './license'
 
 /* ---------- GAS fetch: إصلاح Failed to fetch عبر redirect follow + text/plain ---------- */
@@ -54,13 +54,13 @@ export const StorageService = {
   async fetchRemote(gasUrl) {
     const res = await withTimeout(gasPost(gasUrl, { action: 'getAll' }), 8000)
     const json = await res.json()
-    if (!json || !json.ok || !json.data) throw new Error(json?.error || 'استجابة غير صالحة من Google Apps Script')
+    if (!json || !json.ok || !json.data) throw new Error(json?.error || 'تعذر الاتصال بالخدمة السحابية')
     return json.data
   },
   async pushRemote(gasUrl, db) {
     const res = await withTimeout(gasPost(gasUrl, { action: 'saveAll', data: db }), 10000)
     const json = await res.json()
-    if (!json || !json.ok) throw new Error(json?.error || 'فشل الدفع إلى Sheets')
+    if (!json || !json.ok) throw new Error(json?.error || 'تعذر حفظ البيانات في السحابة')
     return json
   },
   async callRemote(gasUrl, action, payload = {}) {
@@ -317,14 +317,43 @@ export function AuthProvider({ children }) {
   }, [session, db])
 
   const login = useCallback(
-    (identifier, password) => {
+    async (identifier, password) => {
+      const raw = String(identifier).trim()
+      const id = raw.toLowerCase()
+      const norm = isPhoneLike(raw) ? normalizePhone(raw) : null
       const reg = loadRegistry()
-      const id = String(identifier).trim().toLowerCase()
-      const entry = reg.users.find((u) => (u.identifier && u.identifier.toLowerCase() === id) || (u.phone && u.phone.replace(/\D/g, '') === id.replace(/\D/g, '')))
-      if (!entry) return { ok: false, error: 'لا يوجد حساب بهذا البريد أو رقم الهاتف — سجّل مدرسة أو حساب طالب أولاً' }
+      let entry = reg.users.find(
+        (u) => (u.identifier && u.identifier.toLowerCase() === id) || (norm && u.phone && normalizePhone(u.phone) === norm),
+      )
+      // لم يُ found محلياً → استعلام مباشر من Supabase (تسجيل دخول من أي جهاز جديد)
+      if (!entry && supabase) {
+        const remoteUsers = await cloudFindUser(id, norm)
+        if (remoteUsers && remoteUsers.length) {
+          const match = remoteUsers.find((u) => u.password === password) || remoteUsers[0]
+          const schoolId = match.school_id
+          if (schoolId) {
+            // اسحب بيانات المدرسة من السحابة إلى التخزين المحلي
+            const cloud = await pullSchool(schoolId)
+            if (cloud) {
+              const schoolRow = cloud.school
+              if (schoolRow && !reg.schools.some((s) => s.id === schoolId)) {
+                reg.schools.push({ id: schoolId, name: schoolRow.name, code: schoolRow.code, createdAt: schoolRow.created_at })
+              }
+              const local = StorageService.loadSchoolSync(schoolId)
+              const merged = { ...local, ...cloud, settings: { ...cloud.settings, ...local.settings, schoolId, gasUrl: '' } }
+              if (schoolRow) merged.schoolCode = schoolRow.code
+              StorageService.saveSchool(schoolId, merged)
+              saveRegistry(reg)
+              entry = { schoolId, userId: match.id }
+            }
+          }
+        }
+      }
+      if (!entry) return { ok: false, error: 'لا يوجد حساب بهذا البريد الإلكتروني أو رقم الهاتف — تأكد من التسجيل أولاً' }
       const schoolDb = StorageService.loadSchoolSync(entry.schoolId)
       const u = schoolDb.users.find((x) => x.id === entry.userId)
-      if (!u || u.password !== password) return { ok: false, error: 'كلمة المرور غير صحيحة' }
+      if (!u) return { ok: false, error: 'تعذر تحميل بيانات الحساب — أعد المحاولة' }
+      if (u.password !== password) return { ok: false, error: 'كلمة المرور غير صحيحة' }
       if (u.status === 'suspended') return { ok: false, error: 'تم إيقاف هذا الحساب — تواصل مع مدير المدرسة' }
       setSession({ userId: u.id, schoolId: entry.schoolId, at: new Date().toISOString() })
       return { ok: true }
@@ -333,10 +362,10 @@ export function AuthProvider({ children }) {
   )
 
   const registerSchool = useCallback(
-    ({ schoolName, adminName, identifier, phone, password, licenseKey }) => {
+    async ({ schoolName, adminName, identifier, phone, password, licenseKey }) => {
       const key = String(licenseKey || '').trim().toUpperCase()
       if (!isValidLicenseKey(key)) {
-        return { ok: false, error: 'كود التفعيل غير صالح — اطلب كود التفعيل (License Key) من صاحب التطبيق' }
+        return { ok: false, error: 'كود التفعيل غير صالح — اطلب كود التفعيل من صاحب التطبيق' }
       }
       const reg = loadRegistry()
       const id = String(identifier).trim().toLowerCase()
@@ -359,7 +388,7 @@ export function AuthProvider({ children }) {
   )
 
   const registerStudent = useCallback(
-    ({ code, name, birthDate, parentName, parentPhone, password, photo }) => {
+    async ({ code, name, birthDate, parentName, parentPhone, password, photo }) => {
       const reg = loadRegistry()
       const input = String(code || '').trim().toUpperCase()
       // Accept teacher code (TCH-XXXX) or school code
@@ -378,23 +407,29 @@ export function AuthProvider({ children }) {
       }
       if (!school) return { ok: false, error: 'الكود غير صحيح — أدخل كود المعلم (TCH-XXXX) أو كود المدرسة' }
       const schoolDb = StorageService.loadSchoolSync(school.id)
-      const phoneDigits = String(parentPhone || '').replace(/\D/g, '')
-      let parent = schoolDb.users.find((u) => u.role === 'parent' && u.phone && u.phone.replace(/\D/g, '') === phoneDigits)
+      const phoneDigits = normalizePhone(parentPhone)
+      let parent = schoolDb.users.find((u) => u.role === 'parent' && u.phone && normalizePhone(u.phone) === phoneDigits)
       let parentId
       if (parent) {
         parentId = parent.id
       } else {
         parentId = uid()
-        schoolDb.users.push({ id: parentId, name: parentName.trim(), email: '', phone: parentPhone, password, role: 'parent', status: 'active', photo: '', createdAt: new Date().toISOString() })
-        reg.users.push({ schoolId: school.id, userId: parentId, identifier: '', phone: parentPhone, role: 'parent', name: parentName.trim() })
+        schoolDb.users.push({ id: parentId, name: parentName.trim(), email: '', phone: phoneDigits, password, role: 'parent', status: 'active', photo: '', createdAt: new Date().toISOString() })
+        reg.users.push({ schoolId: school.id, userId: parentId, identifier: '', phone: phoneDigits, role: 'parent', name: parentName.trim() })
       }
       const sid = 'stu-' + uid().slice(3, 10)
       const userId = 'usr-' + sid
-      schoolDb.users.push({ id: userId, name: name.trim(), email: '', phone: '', password, role: 'student', status: 'active', studentId: sid, photo: photo || '', createdAt: new Date().toISOString() })
+      schoolDb.users.push({ id: userId, name: name.trim(), email: '', phone: phoneDigits, password, role: 'student', status: 'active', studentId: sid, photo: photo || '', createdAt: new Date().toISOString() })
       reg.users.push({ schoolId: school.id, userId, identifier: '', phone: phoneDigits, role: 'student', name: name.trim() })
-      schoolDb.students.push({ id: sid, userId, name: name.trim(), birthDate: birthDate || '', circleId: circleId || null, parentId, qrCode: `KAND-${sid.toUpperCase()}`, photo: photo || '', joinedAt: todayStr(), createdAt: new Date().toISOString() })
+      // ربط بأول حلقة متاحة للمعلم أو للمدرسة تلقائياً
+      if (!circleId) {
+        circleId = schoolDb.circles.find((c) => c.teacherId && schoolDb.users.find((u) => u.id === c.teacherId && u.teacherCode === input))?.id
+          || schoolDb.circles[0]?.id || null
+      }
+      schoolDb.students.push({ id: sid, userId, name: name.trim(), birthDate: birthDate || '', circleId, parentId, qrCode: `KAND-${sid.toUpperCase()}`, photo: photo || '', joinedAt: todayStr(), createdAt: new Date().toISOString() })
       saveRegistry(reg)
       StorageService.saveSchool(school.id, schoolDb)
+      await pushSchool(schoolDb)
       return { ok: true, school }
     },
     [],

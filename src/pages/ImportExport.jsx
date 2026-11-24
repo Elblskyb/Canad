@@ -28,7 +28,7 @@ export default function ImportExport() {
         toast(`تم استيراد ${added.length} طالب${newCircles.length ? ` وإنشاء ${newCircles.length} حلقة جديدة` : ''}`)
       }
     } catch (err) {
-      toast('تعذر قراءة ملف Excel: ' + err.message, 'error')
+      toast('تعذر قراءة ملف جدول البيانات: ' + err.message, 'error')
     }
     setImporting(false)
     e.target.value = ''
@@ -37,23 +37,23 @@ export default function ImportExport() {
   return (
     <div className="grid grid-cols-12 gap-4">
       <Card className="col-span-12 xl:col-span-6">
-        <CardTitle icon={FileSpreadsheet} title="تصدير شامل" subtitle="كل بيانات المدرسة في ملف Excel واحد متعدد الأوراق" />
+        <CardTitle icon={FileSpreadsheet} title="تصدير شامل" subtitle="كل بيانات المدرسة في ملف جدول بيانات واحد متعدد الأوراق" />
         <div className="flex flex-col gap-2.5">
-          <button className="btn-primary" onClick={() => { exportAll(db); toast('تم تصدير ملف Excel شامل') }}>
-            <Download size={16} /> تصدير شامل لكل البيانات (Excel متعدد الأوراق)
+          <button className="btn-primary" onClick={() => { exportAll(db); toast('تم تصدير ملف جدول البيانات الشامل') }}>
+            <Download size={16} /> تصدير شامل لكل البيانات (متعدد الأوراق)
           </button>
           <p className="text-xs text-muted leading-6">الأوراق: الطلاب، الحلقات، الحضور، الحفظ، الاختبارات</p>
         </div>
       </Card>
 
       <Card className="col-span-12 xl:col-span-6">
-        <CardTitle icon={Upload} title="استيراد الطلاب من Excel" subtitle="يقرأ الملف ويضيف الطلاب، وينشئ الحلقات غير الموجودة تلقائياً" />
+        <CardTitle icon={Upload} title="استيراد الطلاب من جدول بيانات" subtitle="يقرأ الملف ويضيف الطلاب، وينشئ الحلقات غير الموجودة تلقائياً" />
         <div className="flex flex-col gap-2.5">
-          <button className="btn-ghost w-fit" onClick={() => { studentTemplate(); toast('تم تنزيل قالب Excel للطلاب') }}>
-            <FileDown size={15} /> إنشاء قالب Excel للطلاب (فارغ)
+          <button className="btn-ghost w-fit" onClick={() => { studentTemplate(); toast('تم تنزيل قالب جدول البيانات للطلاب') }}>
+            <FileDown size={15} /> إنشاء قالب جدول البيانات للطلاب (فارغ)
           </button>
           <button className="btn-primary w-fit" onClick={() => fileRef.current?.click()} disabled={importing}>
-            <Upload size={15} /> {importing ? 'جارٍ الاستيراد...' : ' استيراد الطلاب من ملف Excel'}
+            <Upload size={15} /> {importing ? 'جارٍ الاستيراد...' : ' استيراد الطلاب من ملف جدول بيانات'}
           </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onImport} />
           <p className="text-xs text-muted leading-6">الأعمدة المطلوبة: الاسم، تاريخ الميلاد، اسم الحلقة، اسم ولي الأمر، هاتف ولي الأمر</p>
@@ -61,7 +61,7 @@ export default function ImportExport() {
       </Card>
 
       <Card className="col-span-12">
-        <CardTitle icon={Table2} title="تصدير منفصل" subtitle="كل جدول في ملف Excel مستقل" />
+        <CardTitle icon={Table2} title="تصدير منفصل" subtitle="كل جدول في ملف مستقل" />
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
           <button className="btn-ghost justify-start" onClick={() => { exportStudents(db); toast('تم تصدير الطلاب') }}>
             <Users size={15} className="text-accent" /> الطلاب ({db.students.length})
@@ -81,7 +81,7 @@ export default function ImportExport() {
       {db.students.length === 0 && (
         <div className="col-span-12">
           <Card>
-            <Empty icon={FileSpreadsheet} title="لا توجد بيانات بعد" hint="سجّل طلاباً من صفحة الحلقات والطلاب، أو استوردهم من Excel" />
+            <Empty icon={FileSpreadsheet} title="لا توجد بيانات بعد" hint="سجّل طلاباً من صفحة الحلقات والطلاب، أو استوردهم من ملف جدول بيانات" />
           </Card>
         </div>
       )}

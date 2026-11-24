@@ -39,11 +39,13 @@ export default function Circles({ teacherMode = false }) {
   }, [db, search, teacherMode, myCircleIds])
 
   const saveCircle = (form) => {
+    const payload = teacherMode ? { ...form, teacherId: user.id } : form
     update((d) => {
-      if (form.id) {
-        Object.assign(d.circles.find((x) => x.id === form.id), form)
+      if (payload.id) {
+        const c = d.circles.find((x) => x.id === payload.id)
+        if (c && (isAdmin || c.teacherId === user.id)) Object.assign(c, payload)
       } else {
-        d.circles.push({ id: 'cir-' + uid().slice(3, 9), createdAt: new Date().toISOString(), ...form })
+        d.circles.push({ id: 'cir-' + uid().slice(3, 9), createdAt: new Date().toISOString(), ...payload })
       }
       d.users.forEach((u) => {
         if (u.role === 'teacher') u.circleId = d.circles.find((c) => c.teacherId === u.id)?.id || null
@@ -128,7 +130,8 @@ export default function Circles({ teacherMode = false }) {
       <div className="flex flex-wrap items-center gap-3">
         <Tabs
           tabs={[
-            ...(isAdmin ? [{ key: 'circles', label: `الحلقات (${db.circles.length})` }, { key: 'teachers', label: `المعلمون (${teachers.length})` }] : []),
+            { key: 'circles', label: `${teacherMode ? 'حلقاتي' : 'الحلقات'} (${visibleCircles.length})` },
+            ...(isAdmin ? [{ key: 'teachers', label: `المعلمون (${teachers.length})` }] : []),
             { key: 'students', label: `${teacherMode ? 'طلابي' : 'الطلاب'} (${visibleStudents.length})` },
             { key: 'archive', label: `الأرشيف المؤقت (${db.archive.length})` },
           ]}
@@ -136,8 +139,8 @@ export default function Circles({ teacherMode = false }) {
           onChange={setTab}
         />
         <div className="flex-1" />
-        {isAdmin && tab === 'circles' && (
-          <button className="btn-primary" onClick={() => setCircleModal({ schedule: [{ day: 'السبت', time: '09:00' }] })}>
+        {tab === 'circles' && (
+          <button className="btn-primary" onClick={() => setCircleModal({ schedule: [{ day: 'السبت', time: '09:00', end: '10:30' }] })}>
             <Plus size={16} /> إضافة حلقة
           </button>
         )}
@@ -159,7 +162,7 @@ export default function Circles({ teacherMode = false }) {
         )}
       </div>
 
-      {tab === 'circles' && isAdmin && (
+      {tab === 'circles' && (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
           {visibleCircles.map((c) => {
             const teacher = userById(db, c.teacherId)
@@ -175,16 +178,18 @@ export default function Circles({ teacherMode = false }) {
                 </div>
                 <div className="flex flex-col gap-1.5 text-sm text-muted mb-4">
                   <span className="flex items-center gap-2"><Users size={13} className="text-accent" /> المعلم: {teacher?.name || '—'} — {count} طالب</span>
-                  <span className="flex items-center gap-2"><Clock size={13} className="text-bronze" /> {c.schedule.map((s) => `${s.day} ${s.time}`).join('، ')}</span>
+                  <span className="flex items-center gap-2"><Clock size={13} className="text-bronze" /> {c.schedule.map((s) => `${s.day} ${s.time}${s.end ? ' - ' + s.end : ''}`).join('، ')}</span>
                   <span className="text-xs">الفئة العمرية: {c.ageGroup}</span>
                 </div>
                 <div className="mt-auto flex gap-2">
                   <button className="btn-ghost flex-1 !py-2 !text-xs" onClick={() => setCircleModal(c)}>
                     <Pencil size={13} /> تعديل
                   </button>
-                  <button className="btn-danger !py-2 !text-xs" onClick={() => setDelTarget({ kind: 'circle', record: c })}>
-                    <Trash2 size={13} /> حذف
-                  </button>
+                  {(isAdmin || c.teacherId === user.id) && (
+                    <button className="btn-danger !py-2 !text-xs" onClick={() => setDelTarget({ kind: 'circle', record: c })}>
+                      <Trash2 size={13} /> حذف
+                    </button>
+                  )}
                 </div>
               </Card>
             )
@@ -196,7 +201,7 @@ export default function Circles({ teacherMode = false }) {
       {tab === 'teachers' && isAdmin && (
         <Card className="!p-0 overflow-hidden">
           {teachers.length === 0 ? (
-            <Empty icon={GraduationCap} title="لا يوجد معلمون بعد" hint="أضف معلماًrect أس Gijzelobrevb " />
+            <Empty icon={GraduationCap} title="لا يوجد معلمون بعد" hint="أضف معلماً جديداً من زر «إضافة معلم» في الأعلى" />
           ) : (
             <Table columns={['المعلم', 'كود المعلم', 'البريد', 'الهاتف', 'الحالة', 'إجراءات']}>
               {teachers.map((t) => (
@@ -271,7 +276,7 @@ export default function Circles({ teacherMode = false }) {
                     <td className="td text-sm text-muted">{fmtDate(s.joinedAt)}</td>
                     <td className="td">
                       <div className="flex gap-1.5 flex-wrap">
-                        <button className="icon-btn !w-8 !h-8" title="البطاقة الرقمية (QR)" onClick={() => setQrStudent(s)}><QrCode size={14} /></button>
+                        <button className="icon-btn !w-8 !h-8" title="البطاقة الرقمية" onClick={() => setQrStudent(s)}><QrCode size={14} /></button>
                         <button className="icon-btn !w-8 !h-8" title="تحميل بطاقة الطالب" onClick={() => downloadCard(s)}><FileDown size={14} /></button>
                         <button className="icon-btn !w-8 !h-8" title="مراسلة ولي الأمر" onClick={() => setContact({ student: s, parent, circle, type: 'note', detail: '' })}><Phone size={14} /></button>
                         <button className="icon-btn !w-8 !h-8" title="تعديل" onClick={() => setStudentModal(s)}><Pencil size={14} /></button>
@@ -310,7 +315,7 @@ export default function Circles({ teacherMode = false }) {
         </Card>
       )}
 
-      {circleModal && <CircleModal value={circleModal} teachers={teachers} onClose={() => setCircleModal(null)} onSave={saveCircle} />}
+      {circleModal && <CircleModal value={circleModal} teachers={teachers} lockTeacher={teacherMode} onClose={() => setCircleModal(null)} onSave={saveCircle} />}
       {studentModal && <StudentModal value={studentModal} circles={visibleCircles} parents={parents} onClose={() => setStudentModal(null)} onSave={saveStudent} />}
       {teacherModal && <TeacherModal value={teacherModal} onClose={() => setTeacherModal(null)} onSave={saveTeacher} />}
 
@@ -351,29 +356,58 @@ export default function Circles({ teacherMode = false }) {
   )
 }
 
-function CircleModal({ value, teachers, onClose, onSave }) {
-  const [form, setForm] = useState(value)
+function CircleModal({ value, teachers, lockTeacher, onClose, onSave }) {
+  const [form, setForm] = useState(() => {
+    const schedule = (value.schedule && value.schedule.length ? value.schedule : [{ day: 'السبت', time: '09:00', end: '10:30' }])
+    return { ...value, schedule, start: schedule[0]?.time || '09:00', end: schedule[0]?.end || '' }
+  })
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-  const setSchedule = (i, k, v) =>
-    setForm((f) => ({ ...f, schedule: f.schedule.map((s, idx) => (idx === i ? { ...s, [k]: v } : s)) }))
+  const days = form.schedule.map((s) => s.day)
+  const toggleDay = (day) => {
+    setForm((f) => {
+      const has = f.schedule.some((s) => s.day === day)
+      const schedule = has
+        ? f.schedule.filter((s) => s.day !== day)
+        : [...f.schedule, { day, time: f.start || '09:00', end: f.end || '' }]
+      return { ...f, schedule }
+    })
+  }
+  const setDayTime = (day, k, v) =>
+    setForm((f) => ({ ...f, schedule: f.schedule.map((s) => (s.day === day ? { ...s, [k]: v } : s)) }))
+  const applyTimeToSelected = () =>
+    setForm((f) => ({ ...f, schedule: f.schedule.map((s) => ({ ...s, time: f.start, end: f.end })) }))
+  const quick = (list) =>
+    setForm((f) => ({
+      ...f,
+      schedule: list.map((day) => {
+        const existing = f.schedule.find((s) => s.day === day)
+        return existing || { day, time: f.start || '09:00', end: f.end || '' }
+      }),
+    }))
+  const ALL = AR_DAYS
+  const SCHOOL_DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس']
+  const WEEKEND = ['الجمعة', 'السبت']
+
   return (
     <Modal open onClose={onClose} title={form.id ? 'تعديل الحلقة' : 'إضافة حلقة جديدة'} icon={Users}
       footer={
         <>
           <button className="btn-ghost" onClick={onClose}>إلغاء</button>
-          <button className="btn-primary" onClick={() => onSave(form)} disabled={!form.name}>حفظ الحلقة</button>
+          <button className="btn-primary" onClick={() => onSave(form)} disabled={!form.name || !form.schedule.length}>حفظ الحلقة</button>
         </>
       }
     >
       <div className="flex flex-col gap-3.5">
         <Field label="اسم الحلقة" required><input className="input" value={form.name || ''} onChange={(e) => set('name', e.target.value)} placeholder="مثال: حلقة النخبة" /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="المعلم">
-            <select className="input" value={form.teacherId || ''} onChange={(e) => set('teacherId', e.target.value || null)}>
-              <option value="">بدون معلم (لاحقاً)</option>
-              {teachers.filter((t) => t.status !== 'suspended').map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </Field>
+          {!lockTeacher && (
+            <Field label="المعلم">
+              <select className="input" value={form.teacherId || ''} onChange={(e) => set('teacherId', e.target.value || null)}>
+                <option value="">بدون معلم (لاحقاً)</option>
+                {teachers.filter((t) => t.status !== 'suspended').map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </Field>
+          )}
           <Field label="القاعة"><input className="input" value={form.room || ''} onChange={(e) => set('room', e.target.value)} placeholder="القاعة الأولى" /></Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -384,22 +418,57 @@ function CircleModal({ value, teachers, onClose, onSave }) {
             </select>
           </Field>
         </div>
-        <Field label="المواعيد الأسبوعية">
-          <div className="flex flex-col gap-2">
-            {(form.schedule || []).map((s, i) => (
-              <div key={i} className="flex gap-2">
-                <select className="input" value={s.day} onChange={(e) => setSchedule(i, 'day', e.target.value)}>
-                  {AR_DAYS.map((d) => <option key={d}>{d}</option>)}
-                </select>
-                <input className="input w-28" type="time" value={s.time} onChange={(e) => setSchedule(i, 'time', e.target.value)} />
-                <button className="icon-btn shrink-0" onClick={() => setForm((f) => ({ ...f, schedule: f.schedule.filter((_, idx) => idx !== i) }))} title="حذف الموعد"><Trash2 size={14} /></button>
-              </div>
+        <Field label="أيام الأسبوع — اختر بضغطة واحدة">
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {[
+              ['تحديد كل الأسبوع', ALL],
+              ['أيام الدراسة (الأحد - الخميس)', SCHOOL_DAYS],
+              ['عطلة نهاية الأسبوع (الجمعة والسبت)', WEEKEND],
+            ].map(([label, list]) => (
+              <button key={label} type="button" className="btn-ghost !py-1.5 !px-2.5 !text-[11px]" onClick={() => quick(list)}>{label}</button>
             ))}
-            <button className="btn-ghost !py-2 !text-xs w-fit" onClick={() => setForm((f) => ({ ...f, schedule: [...(f.schedule || []), { day: 'السبت', time: '10:00' }] }))}>
-              <Plus size={13} /> إضافة موعد
-            </button>
+            <button type="button" className="btn-danger !py-1.5 !px-2.5 !text-[11px]" onClick={() => setForm((f) => ({ ...f, schedule: [] }))}>إلغاء التحديد</button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {AR_DAYS.map((d) => {
+              const on = days.includes(d)
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => toggleDay(d)}
+                  className={cx(
+                    'rounded-xl border px-3 py-2 text-xs font-bold transition-all active:scale-95',
+                    on ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-ink',
+                  )}
+                >
+                  {d}
+                </button>
+              )
+            })}
           </div>
         </Field>
+        <Field label="وقت البداية ووقت النهاية (يُطبَّق على كل الأيام المحددة)">
+          <div className="flex items-center gap-2">
+            <input className="input w-32" type="time" value={form.start || '09:00'} onChange={(e) => set('start', e.target.value)} />
+            <span className="text-muted text-xs">إلى</span>
+            <input className="input w-32" type="time" value={form.end || ''} onChange={(e) => set('end', e.target.value)} />
+            <button type="button" className="btn-ghost !py-2 !text-xs" onClick={applyTimeToSelected}>تطبيق على المحدد</button>
+          </div>
+        </Field>
+        {form.schedule.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[11px] text-muted">تعديل يوم معين:</p>
+            {form.schedule.map((s) => (
+              <div key={s.day} className="flex items-center gap-2">
+                <span className="text-xs font-bold w-20 shrink-0">{s.day}</span>
+                <input className="input !py-1.5 !text-xs w-28" type="time" value={s.time} onChange={(e) => setDayTime(s.day, 'time', e.target.value)} />
+                <span className="text-muted text-[10px]">إلى</span>
+                <input className="input !py-1.5 !text-xs w-28" type="time" value={s.end || ''} onChange={(e) => setDayTime(s.day, 'end', e.target.value)} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -419,7 +488,7 @@ function StudentModal({ value, circles, parents, onClose, onSave }) {
   }
   return (
     <Modal open onClose={onClose} title={form.id ? 'تعديل بيانات الطالب' : 'تسجيل طالب جديد'} icon={UserPlus}
-      subtitle={form.id ? undefined : 'سيتم إنشاء حساب طالب + توليد بطاقة QR فريدة تلقائياً'}
+      subtitle={form.id ? undefined : 'سيتم إنشاء حساب طالب + توليد بطاقة رقمية فريدة تلقائياً'}
       footer={
         <>
           <button className="btn-ghost" onClick={onClose}>إلغاء</button>
@@ -440,7 +509,7 @@ function StudentModal({ value, circles, parents, onClose, onSave }) {
         <Field label="اسم الطالب" required><input className="input" value={form.name || ''} onChange={(e) => set('name', e.target.value)} placeholder="الاسم الكامل" /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="تاريخ الميلاد"><input className="input" type="date" value={form.birthDate || ''} onChange={(e) => set('birthDate', e.target.value)} /></Field>
-          <Field label="رقم هاتف احتياطي"><input className="input" dir="ltr" value={form.phone || ''} onChange={(e) => set('phone', e.target.value)} placeholder="05xxxxxxxx" /></Field>
+          <Field label="رقم هاتف احتياطي"><input className="input" dir="ltr" value={form.phone || ''} onChange={(e) => set('phone', e.target.value)} placeholder="رقم الهاتف" /></Field>
         </div>
         <Field label="الحلقة">
           <select className="input" value={form.circleId || ''} onChange={(e) => set('circleId', e.target.value || null)}>
@@ -481,8 +550,8 @@ function TeacherModal({ value, onClose, onSave }) {
       <div className="flex flex-col gap-3.5">
         <Field label="اسم المعلم" required><input className="input" value={form.name || ''} onChange={(e) => set('name', e.target.value)} placeholder="الاسم الكامل" /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="البريد الإلكتروني (LETTER للدخول)" required={!form.id}><input className="input" dir="ltr" value={form.email || ''} onChange={(e) => set('email', e.target.value)} placeholder="teacher@school.com" /></Field>
-          <Field label="رقم الهاتف"><input className="input" dir="ltr" value={form.phone || ''} onChange={(e) => set('phone', e.target.value)} placeholder="05xxxxxxxx" /></Field>
+          <Field label="البريد الإلكتروني (يُستخدم لتسجيل الدخول)" required={!form.id}><input className="input" dir="ltr" value={form.email || ''} onChange={(e) => set('email', e.target.value)} placeholder="البريد الإلكتروني" /></Field>
+          <Field label="رقم الهاتف"><input className="input" dir="ltr" value={form.phone || ''} onChange={(e) => set('phone', e.target.value)} placeholder="رقم الهاتف" /></Field>
         </div>
         {!form.id && <Field label="كلمة المرور" required><input className="input" dir="ltr" type="password" value={form.password || ''} onChange={(e) => set('password', e.target.value)} placeholder="••••••" /></Field>}
       </div>

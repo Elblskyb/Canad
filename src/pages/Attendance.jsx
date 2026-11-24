@@ -101,7 +101,7 @@ export default function Attendance() {
         <Tabs tabs={myCircles.map((c) => ({ key: c.id, label: c.name }))} active={circle?.id} onChange={setCircleId} />
         <div className="flex-1" />
         <button className="btn-primary" onClick={() => setScannerOpen(true)}>
-          <ScanLine size={16} /> مسح QR لتسجيل الحضور
+          <ScanLine size={16} /> مسح البطاقة لتسجيل الحضور
         </button>
       </div>
 

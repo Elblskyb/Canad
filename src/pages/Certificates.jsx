@@ -147,7 +147,7 @@ function CategoryCard({ cat, auto, db }) {
     const canvas = canvasRef.current
     if (!canvas) return
     certificateToPDF(canvas, `شهادة-${preview?.recipientName || ''}.pdf`)
-    toast('تم تصدير الشهادة كملف PDF')
+    toast('تم تصدير الشهادة كملف جاهز للطباعة')
   }
 
   return (
@@ -183,7 +183,7 @@ function CategoryCard({ cat, auto, db }) {
                 <Download size={13} /> تحميل PNG
               </button>
               <button className="btn-ghost flex-1 !py-2 !text-xs" onClick={printPDF}>
-                <Printer size={13} /> طباعة PDF
+                <Printer size={13} /> طباعة الشهادة
               </button>
             </div>
           </div>
@@ -249,7 +249,7 @@ function IssuedCard({ cert, db }) {
               }
             }}
           >
-            <Printer size={13} /> حفظ PDF
+            <Printer size={13} /> حفظ الملف
           </button>
         </div>
       </Modal>

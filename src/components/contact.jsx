@@ -22,7 +22,7 @@ export function ContactParentModal({ open, onClose, student, circleName, parentP
           disabled={!parentPhone}
           onClick={() => { openSms(parentPhone, msg); onClose() }}
         >
-          <MessageSquareText size={16} /> إرسال رسالة نصية (SMS)
+          <MessageSquareText size={16} /> إرسال رسالة نصية
         </button>
         {!parentPhone && <p className="text-xs text-danger text-center">لا يوجد رقم هاتف مسجل لولي الأمر</p>}
       </div>

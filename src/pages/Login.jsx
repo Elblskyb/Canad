@@ -29,10 +29,11 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState(null) // 'school' | 'student'
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     setBusy(true)
-    const res = login(identifier, password)
+    setError('')
+    const res = await login(identifier, password)
     if (!res.ok) {
       setError(res.error)
       setBusy(false)
@@ -57,7 +58,7 @@ export default function Login() {
           <BookOpen size={22} className="text-bronze mb-4" strokeWidth={1.6} />
           <p className="font-amiri text-3xl leading-[1.9] text-ink">«إِنَّ مَعَ الْعُسْرِ يُسْرًا» — سورة الشرح</p>
           <p className="text-sm text-muted mt-4 leading-7">
-            منصة هادئة Offline-First لإدارة المدارس القرآنية: حلقات، حضور بالـ QR، تسميع، تقارير، وتكريم —
+            منصة هادئة لإدارة المدارس القرآنية: حلقات، حضور بالمسح، تسميع، تقارير، وتكريم —
             لكل مدرسة بياناتها المعزولة برمز مدرسة فريد.
           </p>
         </div>
@@ -82,7 +83,7 @@ export default function Login() {
 
           <form onSubmit={submit} className="card p-6 flex flex-col gap-4">
             <Field label="البريد الإلكتروني أو رقم الهاتف" required>
-              <input className="input" dir="ltr" placeholder="name@school.com أو 05xxxxxxxx" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
+              <input className="input" dir="ltr" placeholder="بريدك الإلكتروني أو رقم هاتفك" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
             </Field>
             <Field label="كلمة المرور" required>
               <div className="relative">
@@ -121,18 +122,18 @@ function RegisterSchoolModal({ onClose, registerSchool }) {
   const [done, setDone] = useState(null)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  const submit = () => {
+  const submit = async () => {
     if (!form.schoolName || !form.adminName || !form.identifier || !form.password || !form.licenseKey) {
       setError('املأ جميع الحقول المطلوبة — كود التفعيل إلزامي')
       return
     }
-    const res = registerSchool(form)
+    const res = await registerSchool(form)
     if (!res.ok) setError(res.error)
     else setDone(res.school)
   }
 
   return (
-    <Modal open onClose={onClose} title="تسجيل مدرسة قرآنية جديدة" subtitle="ستُنشأ مدرسة مستقلة برمز خاص (School Code) يربط به المعلمون والطلاب" icon={School} wide>
+    <Modal open onClose={onClose} title="تسجيل مدرسة قرآنية جديدة" subtitle="ستُنشأ مدرسة مستقلة برمز خاص يربط به المعلمون والطلاب" icon={School} wide>
       {done ? (
         <div className="flex flex-col items-center gap-3 py-4 text-center">
           <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/25 text-accent flex items-center justify-center">
@@ -149,11 +150,11 @@ function RegisterSchoolModal({ onClose, registerSchool }) {
           <Field label="اسم المدرسة" required><input className="input" value={form.schoolName} onChange={(e) => set('schoolName', e.target.value)} placeholder="مدرسة قَنَد للقرآن الكريم" /></Field>
           <Field label="اسم مدير المدرسة" required><input className="input" value={form.adminName} onChange={(e) => set('adminName', e.target.value)} placeholder="الاسم الكامل" /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="البريد الإلكتروني" required><input className="input" dir="ltr" value={form.identifier} onChange={(e) => set('identifier', e.target.value)} placeholder="admin@school.com" /></Field>
-            <Field label="رقم الهاتف"><input className="input" dir="ltr" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="05xxxxxxxx" /></Field>
+            <Field label="البريد الإلكتروني" required><input className="input" dir="ltr" value={form.identifier} onChange={(e) => set('identifier', e.target.value)} placeholder="بريدك الإلكتروني" /></Field>
+            <Field label="رقم الهاتف"><input className="input" dir="ltr" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="05000000000" /></Field>
           </div>
           <Field label="كلمة المرور" required><input className="input" dir="ltr" type="password" value={form.password} onChange={(e) => set('password', e.target.value)} placeholder="••••••" /></Field>
-          <Field label="كود تفعيل المدرسة (License Key)" required>
+          <Field label="كود تفعيل المدرسة" required>
             <input className="input text-center tracking-widest tabular-nums" dir="ltr" placeholder="KAND-2026-XXXX" value={form.licenseKey} onChange={(e) => set('licenseKey', e.target.value)} />
             <p className="text-[11px] text-muted mt-1">كود التفعيل يحدده صاحب التطبيق — بدونه لا يمكن إنشاء مدرسة</p>
           </Field>
@@ -184,12 +185,12 @@ function RegisterStudentModal({ onClose, registerStudent }) {
     }
   }
 
-  const submit = () => {
+  const submit = async () => {
     if (!form.code || !form.name || !form.parentPhone || !form.password) {
       setError('املأ رمز المدرسة، اسم الطالب، هاتف الولي، وكلمة المرور')
       return
     }
-    const res = registerStudent(form)
+    const res = await registerStudent(form)
     if (!res.ok) setError(res.error)
     else setOk(res.school)
   }
@@ -205,7 +206,7 @@ function RegisterStudentModal({ onClose, registerStudent }) {
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">
-          <Field label="كود المعلم (Teacher Code)" required>
+          <Field label="كود المعلم" required>
             <input className="input text-center tracking-[0.3em] tabular-nums" dir="ltr" placeholder="TCH-1042" value={form.code} onChange={(e) => set('code', e.target.value)} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -214,7 +215,7 @@ function RegisterStudentModal({ onClose, registerStudent }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="اسم ولي الأمر"><input className="input" value={form.parentName} onChange={(e) => set('parentName', e.target.value)} placeholder="الاسم الكامل" /></Field>
-            <Field label="رقم هاتف/واتساب الولي" required><input className="input" dir="ltr" value={form.parentPhone} onChange={(e) => set('parentPhone', e.target.value)} placeholder="05xxxxxxxx" /></Field>
+            <Field label="رقم هاتف/واتساب الولي" required><input className="input" dir="ltr" value={form.parentPhone} onChange={(e) => set('parentPhone', e.target.value)} placeholder="05000000000" /></Field>
           </div>
           <Field label="كلمة المرور" required><input className="input" dir="ltr" type="password" value={form.password} onChange={(e) => set('password', e.target.value)} placeholder="••••••" /></Field>
           <Field label="الصورة الشخصية (اختياري — تُضغط تلقائياً)">

@@ -115,6 +115,17 @@ export const playBeep = (ok = true) => {
 
 export const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
 
+/* تطبيع رقم هاتف موحد: حذف المسافات والرموز وتوحيد البداية 0 / +213 */
+export const normalizePhone = (p) => {
+  let d = String(p || '').replace(/[^\d+]/g, '')
+  if (d.startsWith('+')) d = d.slice(1)
+  if (d.startsWith('00')) d = d.slice(2)
+  if (d.startsWith('0')) d = '213' + d.slice(1)
+  return d
+}
+
+export const isPhoneLike = (s) => /^[\d+][\d\s\-()]*$/.test(String(s || '').trim())
+
 export const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0)
 
 export const arNum = (n) =>

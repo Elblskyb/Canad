@@ -37,7 +37,7 @@ export function StudentQRCard({ student, schoolName, compact = false }) {
       ctx.fillText(schoolName || ('مدرسة ' + 'ك' + 'ند'), canvas.width - 60, 100)
       ctx.fillStyle = '#10B981'
       ctx.font = 'bold 40px Amiri, serif'
-      ctx.fillText('بطاقة طالب — QR', canvas.width - 60, 160)
+      ctx.fillText('بطاقة طالب', canvas.width - 60, 160)
       ctx.drawImage(img, 380, 210, 480, 480)
       ctx.fillStyle = '#e8edf1'
       ctx.font = 'bold 52px Amiri, serif'
@@ -200,7 +200,7 @@ export function QRScannerModal({ open, onClose, students, onScan, circleFilter }
     <Modal
       open={open}
       onClose={onClose}
-      title="مسح بطاقة الطالب (QR)"
+      title="مسح بطاقة الطالب"
       subtitle="وجّه الكاميرا نحو بطاقة الطالب لتسجيل الحضور فوراً"
       icon={ScanLine}
       wide
@@ -252,7 +252,7 @@ export function QRScannerModal({ open, onClose, students, onScan, circleFilter }
           <input
             className="input text-center tracking-widest"
             dir="ltr"
-            placeholder="KAND-STU-000"
+            placeholder="رمز البطاقة"
             value={manual}
             onChange={(e) => setManual(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && manual.trim() && handleCode(manual)}

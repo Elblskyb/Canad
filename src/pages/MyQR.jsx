@@ -23,7 +23,7 @@ export default function MyQR() {
   return (
     <div className="max-w-md mx-auto flex flex-col gap-4">
       <Card>
-        <CardTitle icon={QrCode} title="بطاقتي الرقمية" subtitle="اعرضها للمعلم عند دخول الحصة — تُقرأ بالـ QR لتسجيل حضورك فوراً" />
+        <CardTitle icon={QrCode} title="بطاقتي الرقمية" subtitle="اعرضها للمعلم عند دخول الحصة — تُقرأ بالمسح لتسجيل حضورك فوراً" />
         <div className="text-sm leading-7 text-muted">
           <p>الاسم: <span className="font-bold text-ink">{student.name}</span></p>
           <p>الحلقة: <span className="font-semibold text-ink">{circle?.name || '—'}</span></p>

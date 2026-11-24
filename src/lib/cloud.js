@@ -176,6 +176,21 @@ export async function cloudFindTeacherByCode(teacherCode) {
   }
 }
 
+/* البحث عن مستخدم في السحابة بالبريد أو الهاتف (ued login من أي جهاز) */
+export async function cloudFindUser(identifier, normPhone) {
+  if (!supabase) return null
+  try {
+    let q = supabase.from('users').select('*').limit(10)
+    if (normPhone) q = q.or(`email.eq.${identifier},phone.eq.${normPhone}`)
+    else q = q.eq('email', identifier)
+    const { data, error } = await q
+    if (error) throw error
+    return data || []
+  } catch (e) {
+    return null
+  }
+}
+
 export async function cloudSchoolByCode(code) {
   if (!supabase) return null
   try {

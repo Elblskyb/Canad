@@ -52,14 +52,14 @@ export default function Reports() {
   const exportPDF = () => {
     const el = document.getElementById('report-root')
     if (!el) return
-    toast('جارٍ تجهيز ملف PDF...', 'info')
+    toast('جارٍ تجهيز الملف...', 'info')
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
     if (typeof pdf.html === 'function') {
       pdf.setFont('helvetica', 'normal')
       pdf.html(el, {
         callback: () => {
           pdf.save(`تقرير-${monthLabel(month)}.pdf`)
-          toast('تم حفظ التقرير بصيغة PDF')
+          toast('تم حفظ التقرير كملف جاهز للطباعة')
         },
         x: 8,
         y: 8,
@@ -68,7 +68,7 @@ export default function Reports() {
       })
     } else {
       window.print()
-      toast('استخدم "حفظ كملف PDF" من نافذة الطباعة', 'info')
+      toast('استخدم "حفظ كملف" من نافذة الطباعة', 'info')
     }
   }
 
@@ -106,7 +106,7 @@ export default function Reports() {
           <Printer size={15} /> طباعة
         </button>
         <button className="btn-primary" onClick={exportPDF}>
-          <FileDown size={15} /> تصدير PDF
+          <FileDown size={15} /> تصدير الملف
         </button>
       </div>
 
@@ -155,7 +155,7 @@ function StudentReport({ db, student, month }) {
 
       <div className="grid grid-cols-12 gap-4">
         <Card className="col-span-12 xl:col-span-6">
-          <CardTitle icon={TrendingUp} title="تطور التقييمات" subtitle="evaluations كل جلسات التسميع في الشهر" />
+          <CardTitle icon={TrendingUp} title="تطور التقييمات" subtitle="كل جلسات التسميع في الشهر" />
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={series.byDayScore} margin={{ top: 6, left: -24 }}>

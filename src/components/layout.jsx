@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ScanLine, BarChart3, Award, Settings, BookOpen,
-  GraduationCap, QrCode, Menu, X, Sun, Moon, LogOut, ChevronRight, Landmark, FileSpreadsheet, UserCircle,
+  GraduationCap, QrCode, Menu, X, Sun, Moon, LogOut, ChevronRight, Landmark, FileSpreadsheet, UserCircle, Bell,
 } from 'lucide-react'
 import { cx } from '../lib/helpers'
-import { useAuth } from '../lib/storage'
+import { useAuth, useStore } from '../lib/storage'
+import { Modal } from './ui'
+import { fmtDateTime } from '../lib/helpers'
 
 export const NAV = {
   admin: [
@@ -64,10 +66,16 @@ function Brand({ compact }) {
 
 export function Shell({ active, onNavigate, title, subtitle, children, headerActions }) {
   const { user, logout } = useAuth()
+  const { db, update } = useStore()
   const [light, toggleTheme] = useTheme()
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('kand_sidebar') === 'collapsed')
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [bellOpen, setBellOpen] = useState(false)
   const nav = NAV[user?.role] || []
+
+  const showBell = user && (user.role === 'student' || user.role === 'parent')
+  const notifications = showBell && db ? db.notifications.filter((n) => n.to === user.id).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)) : []
+  const unreadCount = notifications.filter((n) => !n.read).length
 
   const toggleSidebar = () => {
     const v = !collapsed
@@ -157,6 +165,16 @@ export function Shell({ active, onNavigate, title, subtitle, children, headerAct
             </div>
             <div className="flex items-center gap-2">
               {headerActions}
+              {showBell && (
+                <button className="icon-btn relative" onClick={() => setBellOpen(true)} title="الإشعارات" aria-label="الإشعارات">
+                  <Bell size={16} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -left-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+              )}
               <button className="icon-btn" onClick={toggleTheme} title={light ? 'الوضع الليلي' : 'الوضع النهاري'}>
                 {light ? <Moon size={16} /> : <Sun size={16} />}
               </button>
@@ -200,6 +218,45 @@ export function Shell({ active, onNavigate, title, subtitle, children, headerAct
           })}
         </div>
       </nav>
+
+      {/* Notifications center */}
+      <Modal
+        open={bellOpen}
+        onClose={() => setBellOpen(false)}
+        title="مركز الإشعارات"
+        subtitle={unreadCount > 0 ? `${unreadCount} إشعار غير مقروء` : 'كل الإشعارات مقروءة'}
+        icon={Bell}
+        footer={
+          unreadCount > 0 && (
+            <button
+              className="btn-primary"
+              onClick={() => {
+                update((d) => d.notifications.forEach((n) => { if (n.to === user.id) n.read = true }))
+                setBellOpen(false)
+              }}
+            >
+              تحديد الكل كمقروء
+            </button>
+          )
+        }
+      >
+        <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto">
+          {notifications.length === 0 && <p className="text-sm text-muted text-center py-6">لا توجد إشعارات بعد</p>}
+          {notifications.map((n) => (
+            <div key={n.id} className={cx('rounded-xl border px-4 py-3', n.read ? 'border-line bg-card2' : 'border-bronze/30 bg-bronze/10')}>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="font-bold text-sm">{n.title}</span>
+                <span className="text-[10px] text-muted shrink-0">{fmtDateTime(n.createdAt)}</span>
+              </div>
+              <p className="text-xs text-muted leading-6">{n.body}</p>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-[10px] chip">{n.type === 'absent' ? 'غياب' : n.type === 'call' ? 'استدعاء' : n.type === 'reset' ? 'تنبيه إداري' : 'ملاحظة'}</span>
+                {!n.read && <span className="w-2 h-2 rounded-full bg-danger shrink-0" title="غير مقروء" />}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </div>
   )
 }

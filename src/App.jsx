@@ -27,7 +27,7 @@ const TITLES = {
   reports: 'التقارير الشهرية',
   certificates: 'الشهادات التكريمية',
   settings: 'الإعدادات والنسخ الاحتياطي',
-  importexport: 'الاستيراد والتصدير (Excel)',
+  importexport: 'الاستيراد والتصدير',
   profile: 'ملفي الشخصي',
   myqr: 'بطاقتي الرقمية',
 }
