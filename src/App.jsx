@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { SessionProvider, StoreProvider, AuthProvider, useAuth, useStore } from './lib/storage'
 import { ToastProvider, Modal } from './components/ui'
 import { Shell, roleLabel } from './components/layout'
-import { initPush } from './lib/push'
 import { BellRing, CheckCircle2 } from 'lucide-react'
 import Login from './pages/Login'
 import Circles from './pages/Circles'
@@ -88,10 +87,6 @@ function NotificationGate() {
 function Root() {
   const { user } = useAuth()
   const [route, setRoute] = useState({ name: 'dashboard', params: {} })
-
-  useEffect(() => {
-    initPush().catch(() => {})
-  }, [])
 
   if (!user) return <Login />
 
