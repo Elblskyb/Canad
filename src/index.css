@@ -1,0 +1,159 @@
+@import '@fontsource/amiri/400.css';
+@import '@fontsource/amiri/700.css';
+@import '@fontsource/ibm-plex-sans-arabic/400.css';
+@import '@fontsource/ibm-plex-sans-arabic/500.css';
+@import '@fontsource/ibm-plex-sans-arabic/600.css';
+@import '@fontsource/ibm-plex-sans-arabic/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0B1014;
+  --card: #121920;
+  --card2: #161f28;
+  --line: rgba(255, 255, 255, 0.06);
+  --ink: #e8edf1;
+  --muted: #8b98a5;
+  --accent-soft: rgba(16, 185, 129, 0.12);
+  --bronze-soft: rgba(200, 155, 84, 0.14);
+}
+
+html.light {
+  --bg: #F8F6F1;
+  --card: #ffffff;
+  --card2: #f3efe7;
+  --line: rgba(23, 34, 43, 0.09);
+  --ink: #17222b;
+  --muted: #5b6b78;
+  --accent-soft: rgba(13, 148, 136, 0.1);
+  --bronze-soft: rgba(200, 155, 84, 0.16);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-app text-ink font-plex antialiased;
+    font-feature-settings: 'ss01';
+  }
+  ::selection {
+    background: rgba(16, 185, 129, 0.35);
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-card border border-line rounded-2xl;
+  }
+  .card-hover {
+    @apply transition-all duration-300 hover:border-accent/40 hover:shadow-lift hover:-translate-y-0.5;
+  }
+  .input {
+    @apply w-full bg-app border border-line rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder:text-muted outline-none transition-colors focus:border-accent/60 focus:ring-2 focus:ring-accent/15;
+  }
+  .label {
+    @apply block text-xs font-semibold text-muted mb-1.5;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none select-none;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-[#04110c] hover:bg-[#34d399] shadow-[0_6px_20px_rgba(16,185,129,0.25)];
+  }
+  .btn-bronze {
+    @apply btn bg-bronze text-[#241708] hover:bg-[#d9b26f] shadow-[0_6px_20px_rgba(200,155,84,0.25)];
+  }
+  .btn-ghost {
+    @apply btn bg-card border border-line text-ink hover:border-accent/40 hover:text-accent;
+  }
+  .btn-danger {
+    @apply btn bg-danger/10 text-danger border border-danger/25 hover:bg-danger/20;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border border-line bg-card2 text-muted;
+  }
+  .th {
+    @apply text-right text-xs font-semibold text-muted px-3 py-2.5 border-b border-line whitespace-nowrap;
+  }
+  .td {
+    @apply text-sm px-3 py-3 border-b border-line align-middle;
+  }
+  .icon-btn {
+    @apply inline-flex items-center justify-center w-9 h-9 rounded-xl border border-line bg-card text-muted transition-all hover:text-accent hover:border-accent/40 active:scale-95;
+  }
+}
+
+.app-glass { background: color-mix(in srgb, var(--bg) 86%, transparent); }
+.card-glass { background: color-mix(in srgb, var(--card) 94%, transparent); }
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 152, 165, 0.25);
+  border-radius: 8px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.45);
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast {
+  animation: toastIn 0.25s ease both;
+}
+
+.no-scrollbar.app-glass { background: color-mix(in srgb, var(--bg) 86%, transparent); }
+.card-glass { background: color-mix(in srgb, var(--card) 94%, transparent); }
+
+::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  :root,
+  html.light {
+    --bg: #ffffff;
+    --card: #ffffff;
+    --card2: #f6f6f6;
+    --line: rgba(23, 34, 43, 0.14);
+    --ink: #17222b;
+    --muted: #5b6b78;
+  }
+  body {
+    background: #ffffff !important;
+  }
+  .app-chrome aside,
+  .app-chrome > div > header,
+  .app-chrome nav {
+    display: none !important;
+  }
+  .app-chrome > div {
+    padding-right: 0 !important;
+  }
+  .app-chrome main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .card {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+}
