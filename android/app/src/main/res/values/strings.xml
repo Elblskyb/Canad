@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kand</string>
+    <string name="title_activity_main">Kand</string>
+    <string name="package_name">school.kand.app</string>
+    <string name="custom_url_scheme">school.kand.app</string>
+</resources>
