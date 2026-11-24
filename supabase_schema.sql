@@ -151,3 +151,10 @@ alter table public.circles
   add column if not exists room text;
 alter table public.students add column if not exists teacher_id text;
 notify pgrst, 'reload schema';
+
+-- ---------- حقول إضافية لدعم استيراد نسخ Flutter القديمة ----------
+alter table public.students add column if not exists parent_phone text;
+alter table public.students add column if not exists address text;
+alter table public.students add column if not exists notes text;
+alter table public.attendance add column if not exists created_at timestamptz default now();
+notify pgrst, 'reload schema';

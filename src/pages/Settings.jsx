@@ -3,7 +3,8 @@ import {
   Cloud, CloudOff, DatabaseBackup, Upload, Download, RotateCcw, Trash2, Archive, Building2, ShieldCheck,
   FileArchive,
 } from 'lucide-react'
-import { useStore } from '../lib/storage'
+import { useStore, StorageService } from '../lib/storage'
+import { importLegacyZip } from '../lib/legacy'
 import { useToast, Card, CardTitle, Badge, ConfirmDialog, Empty, Field } from '../components/ui'
 import { downloadBackupZip, restoreFromZip } from '../lib/zipbackup'
 import { fmtDateTime, fmtDate } from '../lib/helpers'
@@ -55,7 +56,24 @@ export default function Settings() {
     const f = e.target.files?.[0]
     if (!f) return
     try {
-      const data = await restoreFromZip(f)
+      let data
+      try {
+        data = await restoreFromZip(f)
+      } catch (err) {
+        // نسخة قديمة من تطبيق Flutter: ملف SQLite + student_photos/
+        const legacy = await importLegacyZip(f, db)
+        store.update((d) => {
+          for (const k of ['students', 'circles', 'attendance', 'recitations', 'exams']) {
+            ;(legacy[k] || []).forEach((row) => { if (!d[k].some((x) => x.id === row.id)) d[k].push(row) })
+          }
+        })
+        const { pushSchool } = await import('../lib/cloud')
+        pushSchool(StorageService.loadSchoolSync(db.settings.schoolId)).catch(() => {})
+        const sm = legacy.summary
+        toast(`تم استيراد ${sm.students} طالب و ${sm.circles} حلقة و ${sm.attendance} سجل حضور و ${sm.recitations} تسميع و ${sm.exams} اختبار بنجاح`)
+        e.target.value = ''
+        return
+      }
       store.importJSON(data)
       toast('تمت استعادة البيانات من الملف المضغوط بنجاح')
     } catch (err) {
