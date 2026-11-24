@@ -42,6 +42,16 @@ html.light {
   ::selection {
     background: rgba(16, 185, 129, 0.35);
   }
+  input,
+  textarea,
+  select {
+    direction: rtl;
+    text-align: right;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    text-align: right;
+  }
 }
 
 @layer components {

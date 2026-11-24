@@ -111,12 +111,15 @@ export async function pushSchool(db) {
       { onConflict: 'id' },
     )
     if (schoolErr) throw schoolErr
+    let firstErr = null
     for (const [localKey, table] of Object.entries(TABLES)) {
       const rows = (db[localKey] || []).map((o) => toRow(schoolId, table, o))
       if (!rows.length) continue
       const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' })
-      if (error) throw new Error(`جدول ${table}: ${errText(error)}`)
+      // خطأ عمود غير موجود (PGRST204) أو أي خطأ جدول لا يوقف رفع باقي الجداول
+      if (error && !firstErr) firstErr = new Error(`جدول ${table}: ${errText(error)}`)
     }
+    if (firstErr) throw firstErr
     cloudDiag.lastError = ''
     return true
   } catch (e) {

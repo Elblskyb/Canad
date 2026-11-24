@@ -139,3 +139,15 @@ grant select, insert, update, delete on all tables in schema public to anon, aut
 -- جدول أكواد التفعيل: قراءة فقط — لا يمكن لأي مستخدم إضافة/تعديل/حذف
 revoke insert, update, delete on table public.license_keys from anon, authenticated;
 grant select on table public.license_keys to anon, authenticated;
+
+-- ---------- توسيع الجداول لضمان التوافق الكامل (حل خطأ PGRST204: عمود 'end' غير موجود) ----------
+alter table public.circles
+  add column if not exists "start" text,
+  add column if not exists "end" text,
+  add column if not exists start_time text,
+  add column if not exists end_time text,
+  add column if not exists age_group text,
+  add column if not exists level text,
+  add column if not exists room text;
+alter table public.students add column if not exists teacher_id text;
+notify pgrst, 'reload schema';

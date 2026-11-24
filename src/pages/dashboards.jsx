@@ -15,7 +15,7 @@ import {
   absenteesOfLastSession, attendanceRate, studentProgress, examResultsOf,
   lastSessionDate, circleMonthly, computeAwardCandidates, monthlySeries, userById, circleById,
 } from '../lib/analytics'
-import { todayStr, monthKey, fmtDate, surahName, SURAHS, gradeOf, cx, uid, arNum } from '../lib/helpers'
+import { todayStr, monthKey, monthLabel, fmtDate, surahName, SURAHS, gradeOf, cx, uid, arNum } from '../lib/helpers'
 
 const chartTheme = { grid: 'rgba(139,152,165,0.15)', tick: '#8b98a5', accent: '#10B981', bronze: '#C89B54', teal: '#0D9488' }
 
@@ -517,7 +517,7 @@ export function ParentDashboard({ go }) {
           <Card className="col-span-12 xl:col-span-8">
             <CardTitle
               icon={CheckCircle2}
-              title="تقرير المتابعة — {month}"
+              title={`تقرير المتابعة — ${monthLabel(month)}`}
               subtitle="تأكيد الاطلاع يُسجَّل تلقائياً ضمن مؤشر الولي الأكثر حرصاً"
               action={
                 <button className="btn-primary !py-2 !text-xs" onClick={confirmReading}>

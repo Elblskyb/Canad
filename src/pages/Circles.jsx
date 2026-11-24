@@ -32,20 +32,31 @@ export default function Circles({ teacherMode = false }) {
   const parents = db.users.filter((u) => u.role === 'parent')
 
   const visibleStudents = useMemo(() => {
-    let list = teacherMode ? db.students.filter((s) => myCircleIds.includes(s.circleId)) : db.students
+    let list = teacherMode
+      ? db.students.filter((s) => myCircleIds.includes(s.circleId) || s.teacherId === user.id)
+      : db.students
     const q = search.trim()
-    if (q) list = list.filter((s) => s.name.includes(q) || (circleById(db, s.circleId)?.name || '').includes(q))
+    if (q) list = list.filter((s) => s.name.includes(q) || (circleById(db, s.circleId)?.name || '').includes(q) || (userById(db, s.userId)?.phone || '').includes(q))
     return list
-  }, [db, search, teacherMode, myCircleIds])
+  }, [db, search, teacherMode, myCircleIds, user.id])
 
   const saveCircle = (form) => {
-    const payload = teacherMode ? { ...form, teacherId: user.id } : form
+    const { studentIds, ...rest } = form
+    const payload = teacherMode ? { ...rest, teacherId: user.id } : rest
     update((d) => {
-      if (payload.id) {
-        const c = d.circles.find((x) => x.id === payload.id)
+      let circleId = payload.id
+      if (circleId) {
+        const c = d.circles.find((x) => x.id === circleId)
         if (c && (isAdmin || c.teacherId === user.id)) Object.assign(c, payload)
       } else {
-        d.circles.push({ id: 'cir-' + uid().slice(3, 9), createdAt: new Date().toISOString(), ...payload })
+        circleId = 'cir-' + uid().slice(3, 9)
+        d.circles.push({ id: circleId, createdAt: new Date().toISOString(), ...payload })
+      }
+      if (Array.isArray(studentIds)) {
+        d.students.forEach((st) => {
+          if (studentIds.includes(st.id)) st.circleId = circleId
+          else if (st.circleId === circleId) st.circleId = null
+        })
       }
       d.users.forEach((u) => {
         if (u.role === 'teacher') u.circleId = d.circles.find((c) => c.teacherId === u.id)?.id || null
@@ -271,7 +282,7 @@ export default function Circles({ teacherMode = false }) {
                         </div>
                       </div>
                     </td>
-                    <td className="td">{circle ? <Badge tone="teal">{circle.name}</Badge> : <span className="text-muted text-xs">غير مسجل</span>}</td>
+                    <td className="td">{circle ? <Badge tone="teal">{circle.name}</Badge> : <span className="text-bronze text-xs font-semibold">غير مصنف في حلقة</span>}</td>
                     <td className="td text-sm text-muted">{parent ? parent.name : '—'}</td>
                     <td className="td text-sm text-muted">{fmtDate(s.joinedAt)}</td>
                     <td className="td">
@@ -315,7 +326,17 @@ export default function Circles({ teacherMode = false }) {
         </Card>
       )}
 
-      {circleModal && <CircleModal value={circleModal} teachers={teachers} lockTeacher={teacherMode} onClose={() => setCircleModal(null)} onSave={saveCircle} />}
+      {circleModal && (
+        <CircleModal
+          value={circleModal}
+          teachers={teachers}
+          lockTeacher={teacherMode}
+          students={teacherMode ? db.students.filter((st) => st.teacherId === user.id || myCircleIds.includes(st.circleId) || !st.circleId) : db.students}
+          db={db}
+          onClose={() => setCircleModal(null)}
+          onSave={saveCircle}
+        />
+      )}
       {studentModal && <StudentModal value={studentModal} circles={visibleCircles} parents={parents} onClose={() => setStudentModal(null)} onSave={saveStudent} />}
       {teacherModal && <TeacherModal value={teacherModal} onClose={() => setTeacherModal(null)} onSave={saveTeacher} />}
 
@@ -356,7 +377,10 @@ export default function Circles({ teacherMode = false }) {
   )
 }
 
-function CircleModal({ value, teachers, lockTeacher, onClose, onSave }) {
+function CircleModal({ value, teachers, lockTeacher, students = [], db, onClose, onSave }) {
+  const [sel, setSel] = useState(() => (value.id ? students.filter((st) => st.circleId === value.id).map((st) => st.id) : []))
+  const [sQuery, setSQuery] = useState('')
+  const toggleSel = (id) => setSel((arr) => (arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]))
   const [form, setForm] = useState(() => {
     const schedule = (value.schedule && value.schedule.length ? value.schedule : [{ day: 'السبت', time: '09:00', end: '10:30' }])
     return { ...value, schedule, start: schedule[0]?.time || '09:00', end: schedule[0]?.end || '' }
@@ -393,7 +417,7 @@ function CircleModal({ value, teachers, lockTeacher, onClose, onSave }) {
       footer={
         <>
           <button className="btn-ghost" onClick={onClose}>إلغاء</button>
-          <button className="btn-primary" onClick={() => onSave(form)} disabled={!form.name || !form.schedule.length}>حفظ الحلقة</button>
+          <button className="btn-primary" onClick={() => onSave({ ...form, studentIds: sel })} disabled={!form.name || !form.schedule.length}>حفظ الحلقة</button>
         </>
       }
     >
@@ -469,6 +493,25 @@ function CircleModal({ value, teachers, lockTeacher, onClose, onSave }) {
             ))}
           </div>
         )}
+        <Field label={`طلاب الحلقة (${sel.length})`}>
+          <input className="input !py-2 mb-2" value={sQuery} onChange={(e) => setSQuery(e.target.value)} placeholder="ابحث بالاسم أو رقم الهاتف..." />
+          <div className="flex flex-col gap-1.5 max-h-52 overflow-y-auto rounded-xl border border-line bg-card2 p-2">
+            {students.length === 0 && <p className="text-xs text-muted px-2 py-1.5">لا يوجد طلاب متاحون — سجّل طلاباً أولاً</p>}
+            {students
+              .filter((st) => !sQuery.trim() || st.name.includes(sQuery.trim()) || (userById(db, st.userId)?.phone || '').includes(sQuery.trim()))
+              .map((st) => {
+                const cur = circleById(db, st.circleId)
+                const checked = sel.includes(st.id)
+                return (
+                  <label key={st.id} className={cx('flex items-center gap-2.5 rounded-lg px-2.5 py-2 cursor-pointer transition-colors', checked ? 'bg-accent/10 border border-accent/30' : 'border border-transparent hover:bg-app')}>
+                    <input type="checkbox" className="w-4 h-4 accent-[#10B981] shrink-0" checked={checked} onChange={() => toggleSel(st.id)} />
+                    <span className="flex-1 text-sm font-semibold">{st.name}</span>
+                    {cur ? <span className="text-[10px] text-muted">{cur.id === form.id ? 'هذه الحلقة' : `حلقته الحالية: ${cur.name}`}</span> : <span className="text-[10px] text-bronze">غير مصنف في حلقة</span>}
+                  </label>
+                )
+              })}
+          </div>
+        </Field>
       </div>
     </Modal>
   )

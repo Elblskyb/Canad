@@ -411,12 +411,14 @@ export function AuthProvider({ children }) {
       // Accept teacher code (TCH-XXXX) or school code
       let school = reg.schools.find((s) => s.code === input)
       let circleId = null
+      let teacherId = null
       if (!school && input.startsWith('TCH-')) {
         for (const s of reg.schools) {
           const d = StorageService.loadSchoolSync(s.id)
           const t = d.users.find((u) => u.role === 'teacher' && u.teacherCode === input)
           if (t) {
             school = s
+            teacherId = t.id
             circleId = d.circles.find((c) => c.teacherId === t.id)?.id || null
             break
           }
@@ -443,7 +445,7 @@ export function AuthProvider({ children }) {
         circleId = schoolDb.circles.find((c) => c.teacherId && schoolDb.users.find((u) => u.id === c.teacherId && u.teacherCode === input))?.id
           || schoolDb.circles[0]?.id || null
       }
-      schoolDb.students.push({ id: sid, userId, name: name.trim(), birthDate: birthDate || '', circleId, parentId, qrCode: `KAND-${sid.toUpperCase()}`, photo: photo || '', joinedAt: todayStr(), createdAt: new Date().toISOString() })
+      schoolDb.students.push({ id: sid, userId, name: name.trim(), birthDate: birthDate || '', circleId, teacherId, parentId, qrCode: `KAND-${sid.toUpperCase()}`, photo: photo || '', joinedAt: todayStr(), createdAt: new Date().toISOString() })
       saveRegistry(reg)
       StorageService.saveSchool(school.id, schoolDb)
       await pushSchool(schoolDb)
