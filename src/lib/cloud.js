@@ -63,17 +63,33 @@ const toRow = (schoolId, table, obj) => {
   return row
 }
 
+/* تطبيع موحد: كل صف قادم من Supabase يحتفظ بالمفتاح الأصلي (snake_case) ويُضاف إليه المفتاح المكافئ (camelCase) */
 const fromRow = (row) => {
-  const obj = {}
+  if (!row || typeof row !== 'object') return row
+  const obj = { ...row }
   Object.entries(row).forEach(([k, v]) => {
-    if (k === 'school_id') return
-    if (k === 'to_user') {
-      obj.to = v
-      return
-    }
-    obj[k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = v
+    if (k === 'school_id') { obj.schoolId = v; return }
+    if (k === 'to_user') { obj.to = v; return }
+    const camel = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+    if (camel !== k) obj[camel] = v
   })
   return obj
+}
+
+export const mapUserFromCloud = (row) => fromRow(row)
+export const mapSchoolFromCloud = (row) => fromRow(row)
+
+/* ---------- جلب صف مدرسة من جدول public.schools ---------- */
+export async function cloudGetSchool(schoolId) {
+  if (!supabase || !schoolId) return null
+  try {
+    const { data, error } = await supabase.from('schools').select('*').eq('id', schoolId).maybeSingle()
+    if (error) throw error
+    return data ? mapSchoolFromCloud(data) : null
+  } catch (e) {
+    cloudDiag.lastError = errText(e)
+    return null
+  }
 }
 
 /* ---------- Push: رفع db كامل لمدرسة ---------- */
@@ -205,8 +221,9 @@ export async function cloudFindUser(identifier, normPhone) {
     else q = q.eq('email', identifier)
     const { data, error } = await q
     if (error) throw error
-    return data || []
+    return (data || []).map(mapUserFromCloud)
   } catch (e) {
+    cloudDiag.lastError = errText(e)
     return null
   }
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { SessionProvider, StoreProvider, AuthProvider, useAuth, useStore } from './lib/storage'
+import { SessionProvider, StoreProvider, AuthProvider, useAuth, useStore, useSession } from './lib/storage'
 import { ToastProvider, Modal } from './components/ui'
 import ErrorBoundary from './components/ErrorBoundary'
 import { Shell, roleLabel } from './components/layout'
@@ -87,8 +87,18 @@ function NotificationGate() {
 
 function Root() {
   const { user } = useAuth()
+  const { session } = useSession()
+  const { ready } = useStore()
   const [route, setRoute] = useState({ name: 'dashboard', params: {} })
 
+  if (!session) return <Login />
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-app">
+        <div className="font-amiri text-2xl text-muted animate-pulse">جاري تحميل بيانات المدرسة...</div>
+      </div>
+    )
+  }
   if (!user) return <Login />
 
   const go = (name, params = {}) => setRoute({ name, params })

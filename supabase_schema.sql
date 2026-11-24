@@ -132,3 +132,10 @@ insert into public.license_keys (key, owner_name) values
   ('KAND-2026-DEMO1', 'مدرسة تجريبية 1'),
   ('KAND-2026-DEMO2', 'مدرسة تجريبية 2')
 on conflict (key) do nothing;
+
+-- ---------- منح الصلاحيات الكاملة على schema public (anon + authenticated) ----------
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+-- جدول أكواد التفعيل: قراءة فقط — لا يمكن لأي مستخدم إضافة/تعديل/حذف
+revoke insert, update, delete on table public.license_keys from anon, authenticated;
+grant select on table public.license_keys to anon, authenticated;

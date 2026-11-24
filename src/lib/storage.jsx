@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { buildSchoolDb, loadRegistry, saveRegistry, schoolDbKey, REGISTRY_KEY, SESSION_KEY, newSchoolCode, newSchoolId } from './seed'
 import { uid, todayStr, normalizePhone, isPhoneLike } from './helpers'
 import { idbGet, idbSet } from './idb'
-import { supabase, pushSchool, pullSchool, subscribeSchool, cloudValidateLicense, cloudCreateSchool, cloudFindTeacherByCode, cloudSchoolByCode, cloudFindUser } from './cloud'
+import { supabase, pushSchool, pullSchool, subscribeSchool, cloudValidateLicense, cloudCreateSchool, cloudFindTeacherByCode, cloudSchoolByCode, cloudFindUser, cloudGetSchool, mapUserFromCloud, mapSchoolFromCloud, cloudDiag } from './cloud'
 import { isValidLicenseKey, newTeacherCode } from './license'
 
 /* ---------- GAS fetch: إصلاح Failed to fetch عبر redirect follow + text/plain ---------- */
@@ -118,7 +118,11 @@ export function StoreProvider({ children }) {
             return
           }
           setDb((prev) => {
-            const merged = { ...prev, ...cloud, settings: { ...cloud.settings, ...prev?.settings, schoolId, gasUrl: prev?.settings?.gasUrl || '' } }
+            const merged = { ...prev, ...cloud }
+            for (const k of ['users', 'circles', 'students', 'attendance', 'recitations', 'exams', 'parentLogs', 'certificates', 'notifications', 'backups', 'archive']) {
+              if (Array.isArray(cloud[k]) && cloud[k].length === 0 && Array.isArray(prev?.[k]) && prev[k].length > 0) merged[k] = prev[k]
+            }
+            merged.settings = { ...cloud.settings, ...prev?.settings, schoolId, gasUrl: prev?.settings?.gasUrl || '' }
             StorageService.saveSchool(schoolId, merged)
             return merged
           })
@@ -127,7 +131,15 @@ export function StoreProvider({ children }) {
         unsubRef.current = subscribeSchool(schoolId, () => {
           pullSchool(schoolId).then((cloud) => {
             if (cloud) {
-              setDb((prev) => (prev ? { ...prev, ...cloud, settings: { ...cloud.settings, ...prev.settings, schoolId } } : prev))
+              setDb((prev) => {
+                if (!prev) return prev
+                const merged = { ...prev, ...cloud }
+                for (const k of ['users', 'circles', 'students', 'attendance', 'recitations', 'exams', 'parentLogs', 'certificates', 'notifications', 'backups', 'archive']) {
+                  if (Array.isArray(cloud[k]) && cloud[k].length === 0 && Array.isArray(prev[k]) && prev[k].length > 0) merged[k] = prev[k]
+                }
+                merged.settings = { ...cloud.settings, ...prev.settings, schoolId }
+                return merged
+              })
             }
           })
         })
@@ -325,34 +337,39 @@ export function AuthProvider({ children }) {
       let entry = reg.users.find(
         (u) => (u.identifier && u.identifier.toLowerCase() === id) || (norm && u.phone && normalizePhone(u.phone) === norm),
       )
-      // لم يُ found محلياً → استعلام مباشر من Supabase (تسجيل دخول من أي جهاز جديد)
-      if (!entry && supabase) {
+      let schoolDb = entry ? StorageService.loadSchoolSync(entry.schoolId) : null
+      let u = schoolDb?.users.find((x) => x.id === entry?.userId)
+        || schoolDb?.users.find((x) => (x.email && String(x.email).toLowerCase() === id) || (norm && x.phone && normalizePhone(x.phone) === norm))
+      // إذا لم يُ found محلياً → استعلام مباشر من public.users (دخول من أي جهاز جديد)
+      if ((!entry || !u) && supabase) {
         const remoteUsers = await cloudFindUser(id, norm)
-        if (remoteUsers && remoteUsers.length) {
-          const match = remoteUsers.find((u) => u.password === password) || remoteUsers[0]
-          const schoolId = match.school_id
-          if (schoolId) {
-            // اسحب بيانات المدرسة من السحابة إلى التخزين المحلي
-            const cloud = await pullSchool(schoolId)
-            if (cloud) {
-              const schoolRow = cloud.school
-              if (schoolRow && !reg.schools.some((s) => s.id === schoolId)) {
-                reg.schools.push({ id: schoolId, name: schoolRow.name, code: schoolRow.code, createdAt: schoolRow.created_at })
-              }
-              const local = StorageService.loadSchoolSync(schoolId)
-              const merged = { ...local, ...cloud, settings: { ...cloud.settings, ...local.settings, schoolId, gasUrl: '' } }
-              if (schoolRow) merged.schoolCode = schoolRow.code
-              StorageService.saveSchool(schoolId, merged)
-              saveRegistry(reg)
-              entry = { schoolId, userId: match.id }
-            }
+        const match = (remoteUsers || []).find((x) => x.password === password) || (remoteUsers || [])[0]
+        const schoolId = match && (match.schoolId || match.school_id)
+        if (match && schoolId) {
+          entry = { schoolId, userId: match.id }
+          // احفظ صف المدرسة + المستخدم في التخزين المحلي فوراً قبل الدخول للوحة التحكم
+          const schoolRow = await cloudGetSchool(schoolId)
+          const school = schoolRow || mapSchoolFromCloud({ id: schoolId, name: reg.schools.find((s) => s.id === schoolId)?.name || 'مدرسة' })
+          const cloud = await pullSchool(schoolId)
+          if (!reg.schools.some((s) => s.id === schoolId)) {
+            reg.schools.push({ id: schoolId, name: school.name || 'مدرسة', code: school.code || '', createdAt: school.createdAt || new Date().toISOString() })
           }
+          if (!reg.users.some((x) => x.userId === match.id && x.schoolId === schoolId)) {
+            reg.users.push({ schoolId, userId: match.id, identifier: match.email || id, phone: match.phone || '', role: match.role || 'student', name: match.name || '' })
+          }
+          const local = StorageService.loadSchoolSync(schoolId)
+          const merged = { ...local, ...(cloud || {}), schoolCode: school.code || local.schoolCode, settings: { ...local.settings, ...(cloud?.settings || {}), schoolId, gasUrl: local.settings?.gasUrl || '' } }
+          merged.users = Array.isArray(cloud?.users) && cloud.users.length ? cloud.users : local.users
+          const mapped = mapUserFromCloud(match)
+          if (!merged.users.some((x) => x.id === mapped.id)) merged.users = [...merged.users, mapped]
+          StorageService.saveSchool(schoolId, merged)
+          saveRegistry(reg)
+          schoolDb = merged
+          u = merged.users.find((x) => x.id === entry.userId)
         }
       }
       if (!entry) return { ok: false, error: 'لا يوجد حساب بهذا البريد الإلكتروني أو رقم الهاتف — تأكد من التسجيل أولاً' }
-      const schoolDb = StorageService.loadSchoolSync(entry.schoolId)
-      const u = schoolDb.users.find((x) => x.id === entry.userId)
-      if (!u) return { ok: false, error: 'تعذر تحميل بيانات الحساب — أعد المحاولة' }
+      if (!u) return { ok: false, error: 'تعذر تحميل بيانات الحساب — أعد المحاولة' + (cloudDiag.lastError ? ` (${cloudDiag.lastError})` : '') }
       if (u.password !== password) return { ok: false, error: 'كلمة المرور غير صحيحة' }
       if (u.status === 'suspended') return { ok: false, error: 'تم إيقاف هذا الحساب — تواصل مع مدير المدرسة' }
       setSession({ userId: u.id, schoolId: entry.schoolId, at: new Date().toISOString() })
