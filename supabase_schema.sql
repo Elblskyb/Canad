@@ -126,7 +126,7 @@ alter publication supabase_realtime add table public.notifications;
 alter publication supabase_realtime add table public.backups;
 alter publication supabase_realtime add table public.archive;
 
--- ---------- أكواد تفعيل افتراضية (غيّرها أو أضف acus cámara) ----------
+-- ---------- أكواد تفعيل افتراضية (غيّرها أو أضف المزيد) ----------
 insert into public.license_keys (key, owner_name) values
   ('KAND-2026-MASTER', 'صاحب التطبيق'),
   ('KAND-2026-DEMO1', 'مدرسة تجريبية 1'),
