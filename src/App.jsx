@@ -90,7 +90,7 @@ function Root() {
   const [route, setRoute] = useState({ name: 'dashboard', params: {} })
 
   useEffect(() => {
-    initPush()
+    initPush().catch(() => {})
   }, [])
 
   if (!user) return <Login />
