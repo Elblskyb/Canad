@@ -94,4 +94,22 @@ export const setInput = (el, v) => {
   el.dispatchEvent(new window.Event('input', { bubbles: true }))
   el.dispatchEvent(new window.Event('change', { bubbles: true }))
 }
-export const db = () => JSON.parse(localStorage.getItem('kand_db_v1'))
+export const setSelect = (el, v) => {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set
+  setter.call(el, v)
+  el.dispatchEvent(new window.Event('change', { bubbles: true }))
+}
+export const registry = () => JSON.parse(localStorage.getItem('kand_registry_v1') || '{"schools":[],"users":[]}')
+export const db = () => {
+  const reg = registry()
+  const sid = reg.schools[0]?.id
+  return sid ? JSON.parse(localStorage.getItem('kand_db_' + sid)) : null
+}
+export const schoolCode = () => registry().schools[0]?.code
+
+export const modalEl = () => [...document.querySelectorAll('div.fixed.inset-0')].pop()
+export const mInput = (ph) => [...(modalEl()?.querySelectorAll('input') || [])].find((i) => (i.placeholder || '').includes(ph))
+export const mPassword = () => modalEl()?.querySelector('input[type="password"]')
+export const mSelect = () => modalEl()?.querySelector('select')
+export const loginIdentifier = () => document.querySelector('form input[dir="ltr"]')
+export const loginPassword = () => document.querySelector('form input[type="password"]')

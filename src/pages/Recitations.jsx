@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { BookOpen, Plus, Trash2, Star, Filter } from 'lucide-react'
+import { BookOpen, Plus, Trash2, Star, Filter, Pencil } from 'lucide-react'
 import { useStore, useAuth } from '../lib/storage'
 import { useToast } from '../components/ui'
 import { Card, CardTitle, Modal, ConfirmDialog, Badge, Empty, Table, Field } from '../components/ui'
@@ -10,6 +10,7 @@ export default function Recitations({ initialCircle }) {
   const { user } = useAuth()
   const toast = useToast()
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [del, setDel] = useState(null)
   const [circleFilter, setCircleFilter] = useState(initialCircle || 'all')
 
@@ -24,25 +25,44 @@ export default function Recitations({ initialCircle }) {
 
   const save = (form) => {
     update((d) => {
-      d.recitations.push({
-        id: uid(),
-        studentId: form.studentId,
-        circleId: db.students.find((s) => s.id === form.studentId)?.circleId,
-        teacherId: user.id,
-        date: form.date,
-        type: form.type,
-        surah: Number(form.surah),
-        fromAyah: Number(form.fromAyah),
-        toAyah: Number(form.toAyah),
-        lines: Number(form.lines) || 0,
-        pages: Number(form.pages) || 1,
-        score: Number(form.score),
-        notes: form.notes || '',
-        createdAt: new Date().toISOString(),
-      })
+      if (form.id) {
+        const r = d.recitations.find((x) => x.id === form.id)
+        if (r) {
+          Object.assign(r, {
+            studentId: form.studentId,
+            date: form.date,
+            type: form.type,
+            surah: Number(form.surah),
+            fromAyah: Number(form.fromAyah),
+            toAyah: Number(form.toAyah),
+            lines: Number(form.lines) || 0,
+            pages: Number(form.pages) || 1,
+            score: Number(form.score),
+            notes: form.notes || '',
+          })
+        }
+      } else {
+        d.recitations.push({
+          id: uid(),
+          studentId: form.studentId,
+          circleId: db.students.find((s) => s.id === form.studentId)?.circleId,
+          teacherId: user.id,
+          date: form.date,
+          type: form.type,
+          surah: Number(form.surah),
+          fromAyah: Number(form.fromAyah),
+          toAyah: Number(form.toAyah),
+          lines: Number(form.lines) || 0,
+          pages: Number(form.pages) || 1,
+          score: Number(form.score),
+          notes: form.notes || '',
+          createdAt: new Date().toISOString(),
+        })
+      }
     })
     setOpen(false)
-    toast('تم حفظ جلسة التسميع بنجاح')
+    setEditing(null)
+    toast(form.id ? 'تم تحديث جلسة التسميع' : 'تم حفظ جلسة التسميع بنجاح')
   }
 
   return (
@@ -86,9 +106,14 @@ export default function Recitations({ initialCircle }) {
                   </td>
                   <td className="td text-xs text-muted max-w-[180px] truncate">{r.notes || '—'}</td>
                   <td className="td">
-                    <button className="icon-btn !w-8 !h-8 hover:!text-danger hover:!border-danger/40" onClick={() => setDel(r)} title="حذف (ينتقل إلى الأرشيف)">
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex gap-1">
+                      <button className="icon-btn !w-8 !h-8" title="تعديل" onClick={() => { setEditing(r); setOpen({ ...r }) }}>
+                        <Pencil size={14} />
+                      </button>
+                      <button className="icon-btn !w-8 !h-8 hover:!text-danger hover:!border-danger/40" onClick={() => setDel(r)} title="حذف (ينتقل إلى الأرشيف)">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )
@@ -97,7 +122,7 @@ export default function Recitations({ initialCircle }) {
         )}
       </Card>
 
-      {open && <RecitationModal value={open} students={students} circles={db.circles} onClose={() => setOpen(false)} onSave={save} />}
+      {open && <RecitationModal value={open} students={students} circles={db.circles} onClose={() => { setOpen(false); setEditing(null) }} onSave={save} />}
 
       <ConfirmDialog
         open={!!del}

@@ -1,140 +1,180 @@
-import { loadApp, sleep, text, clickByText, clickByTitle, setInput, db } from './setup.mjs'
+import { loadApp, sleep, text, clickByText, clickByTitle, setInput, setSelect, db, schoolCode, mInput, mPassword, mSelect, loginIdentifier, loginPassword } from './setup.mjs'
 
 loadApp()
 await sleep(1200)
 
 const results = []
 const check = (name, ok) => { results.push([name, !!ok]); console.log(ok ? 'PASS' : 'FAIL', '-', name) }
+const inputByPh = (ph) => [...document.querySelectorAll('input')].find((i) => (i.placeholder || '').includes(ph))
 
-// wrong password error
-setInput(document.querySelector('input[type="email"]'), 'admin@kand.school')
-setInput(document.querySelector('input[type="password"]'), 'wrong')
-clickByText('تسجيل الدخول')
+async function registerSchool() {
+  clickByText('تسجيل مدرسة قرآنية جديدة')
+  await sleep(500)
+  setInput(mInput('مدرسة قَنَد'), 'مدرسةSmoke2')
+  setInput(mInput('الاسم الكامل'), 'مدير 2')
+  setInput(mInput('admin@school.com'), 'admin2@test.school')
+  setInput(mInput('05xxxxxxxx'), '0500000010')
+  setInput(mPassword(), 'pass123')
+  clickByText('إنشاء المدرسة')
+  await sleep(700)
+  clickByText('ابدأ لوحة التحكم')
+  await sleep(1000)
+}
+
+await registerSchool()
+check('تسجيل مدرسة', !!schoolCode())
+
+// add teacher + circle + student
+clickByText('الحلقات والمعلمون والطلاب')
 await sleep(600)
-check('رسالة خطأ كلمة المرور', text().includes('غير صحيحة'))
-
-// correct login
-setInput(document.querySelector('input[type="password"]'), '123456')
-clickByText('تسجيل الدخول')
-await sleep(1200)
-check('دخول المدير', text().includes('إجمالي الطلاب'))
-
-// theme toggle to light
-clickByTitle('الوضع النهاري')
+clickByText('المعلمون (')
 await sleep(400)
-check('الوضع النهاري مفعّل', document.documentElement.classList.contains('light'))
-clickByTitle('الوضع الليلي')
-await sleep(300)
+clickByText('إضافة معلم')
+await sleep(400)
+setInput(mInput('الاسم الكامل'), 'معلم2')
+setInput(mInput('teacher@school.com'), 't2@test.school')
+setInput(mPassword(), 't12345')
+clickByText('إنشاء حساب المعلم')
+await sleep(600)
 
-// add a circle
-clickByText('الحلقات والطلاب')
-await sleep(700)
+clickByText('الحلقات (')
+await sleep(400)
 clickByText('إضافة حلقة')
-await sleep(500)
-const nameInput = [...document.querySelectorAll('input')].find((i) => i.placeholder.includes('مثال'))
-setInput(nameInput, 'حلقة Test تجريبية')
-const sel = [...document.querySelectorAll('select')].find((x) => x.querySelector('option[value="usr-t1"]'))
-const selSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set
-selSetter.call(sel, 'usr-t1')
-sel.dispatchEvent(new window.Event('change', { bubbles: true }))
-await sleep(300)
-clickByText('حفظ الحلقة')
-await sleep(700)
-check('إضافة حلقة جديدة', text().includes('حلقة Test تجريبية'))
-check('الحلقة في قاعدة البيانات', db().circles.some((c) => c.name === 'حلقة Test تجريبية'))
-
-// register a student
-clickByText('الطلاب (')
-await sleep(500)
-clickByText('تسجيل طالب جديد')
-await sleep(500)
-const sName = [...document.querySelectorAll('input')].find((i) => i.placeholder === 'الاسم الكامل')
-setInput(sName, 'اختبار Erik Student')
-clickByText('تسجيل الطالب')
-await sleep(700)
-check('تسجيل طالب + QR', db().students.some((s) => s.name === 'اختبار Erik Student' && s.qrCode.startsWith('KAND-')))
-check('الطالب في الجدول', text().includes('اختبار Erik Student'))
-
-// soft delete student -> archive
-const row = [...document.querySelectorAll('tr')].find((r) => r.textContent.includes('اختبار Erik Student'))
-const delBtn = row?.querySelector('button[title^="حذف"]')
-delBtn?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }))
-await sleep(500)
-clickByText('اضغط مرة أخرى للتأكيد النهائي')
-await sleep(300)
-clickByText('نقل إلى الأرشيف')
-await sleep(700)
-check('نقل إلى الأرشيف', db().archive.some((a) => a.kind === 'student' && a.record.name === 'اختبار Erik Student'))
-check('أُزيل من القائمة', !text().includes('اختبار Erik Student'))
-// restore from archive tab
-clickByText('الأرشيف المؤقت')
-await sleep(500)
-clickByText('استعادة')
-await sleep(700)
-check('استعادة من الأرشيف', db().students.some((s) => s.name === 'اختبار Erik Student') && !db().archive.some((a) => a.record?.name === 'اختبار Erik Student'))
-
-// attendance QR manual scan
-clickByText('الحضور والغياب')
-await sleep(700)
-clickByText('مسح QR لتسجيل الحضور')
-await sleep(600)
-clickByText('إدخال الكود')
 await sleep(400)
-const codeInput = document.querySelector('input[dir="ltr"]')
-setInput(codeInput, 'KAND-STU-001')
-await sleep(300)
-clickByText('تسجيل الحضور بالكود')
-await sleep(800)
-const today = new Date().toISOString().slice(0, 10)
-check('تسجيل حضور عبر QR', db().attendance.some((a) => a.studentId === 'stu-001' && a.date === today && a.status === 'present' && a.method === 'qr'))
-check('إشعار نجاح', text().includes('تم تسجيل حضور'))
-
-// mark absent manually
-clickByText('غائب', )
-await sleep(500)
-
-// exam results save as teacher
-clickByTitle('تسجيل الخروج')
-await sleep(700)
-clickByText('معلم القرآن')
-await sleep(1200)
-clickByText('الاختبارات')
-await sleep(700)
-clickByText('تسجيل / تعديل النتائج')
+setInput(mInput('مثال: حلقة النخبة'), 'حلقة smoke2')
+const tsel = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.textContent.includes('معلم2')))
+if (tsel) setSelect(tsel, tsel.querySelector('option[value^="id-"]')?.value || tsel.options[1]?.value)
+await sleep(200)
+clickByText('حفظ الحلقة')
 await sleep(600)
-const scoreInputs = document.querySelectorAll('input[type="number"]')
-check('محرر نتائج الاختبارات', scoreInputs.length >= 3)
-clickByText('حفظ النتائج وحساب المعدل')
-await sleep(800)
-const ex = db().exams.find((e) => e.results.length && typeof e.results[0].total === 'number' && !!e.results[0].grade)
-check('احتساب المعدل والتقدير', !!ex)
+check('حفظ حلقة مع تعيين معلم', db().circles.length === 1 && !!db().circles[0].teacherId)
 
-// backup + delete-to-archive + restore
+clickByText('الطلاب (')
+await sleep(400)
+clickByText('تسجيل طالب جديد')
+await sleep(400)
+setInput(mInput('الاسم الكامل'), 'طالب smoke2')
+const csel = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.textContent.includes('حلقة smoke2')))
+if (csel) setSelect(csel, csel.options[1]?.value)
+await sleep(200)
+clickByText('تسجيل الطالب')
+await sleep(600)
+check('تسجيل طالب في الحلقة', db().students.length === 1 && !!db().students[0].circleId)
+
+// teacher login -> recitation add/edit/delete
 clickByTitle('تسجيل الخروج')
-await sleep(700)
-clickByText('مدير المدرسة')
+await sleep(600)
+setInput(loginIdentifier(), 't2@test.school')
+setInput(loginPassword(), 't12345')
+clickByText('دخول')
 await sleep(1200)
-clickByText('الإعدادات والنسخ الاحتياطي')
-await sleep(700)
-const before = db().backups.length
-clickByText('نسخة احتياطية الآن')
-await sleep(800)
-check('إنشاء نسخة احتياطية', db().backups.length === before + 1)
-clickByTitle('حذف (ينتقل إلى الأرشيف)')
+check('دخول المعلم', text().includes('طلابي في حلقاتي'))
+
+clickByText('التسميع اليومي')
+await sleep(600)
+clickByText('تسجيل تسميع جديد')
 await sleep(500)
+const ssel = mSelect()
+setSelect(ssel, ssel.options[1]?.value)
+await sleep(200)
+clickByText('حفظ الجلسة')
+await sleep(600)
+check('إضافة تسميع', db().recitations.length === 1)
+
+// edit recitation
+clickByTitle('تعديل')
+await sleep(400)
+const scoreInput = [...document.querySelectorAll('input[type="number"]')].find((i) => i.max === '10' || i.getAttribute('max') === '10')
+if (scoreInput) setInput(scoreInput, '9')
+clickByText('حفظ الجلسة')
+await sleep(600)
+check('تعديل جلسة التسميع', db().recitations.length === 1 && db().recitations[0].score === 9)
+
+// delete to archive + restore
+clickByTitle('حذف (ينتقل إلى الأرشيف)')
+await sleep(400)
 clickByText('اضغط مرة أخرى للتأكيد النهائي')
 await sleep(300)
 clickByText('نقل إلى الأرشيف')
-await sleep(700)
-check('حذف النسخة إلى الأرشيف', db().archive.some((a) => a.kind === 'backup'))
-clickByText('استعادة')
-await sleep(700)
-check('استعادة النسخة', db().backups.length === before + 1 && !db().archive.some((a) => a.kind === 'backup'))
+await sleep(600)
+check('حذف تسميع إلى الأرشيف', db().recitations.length === 0 && db().archive.some((a) => a.kind === 'recitation'))
 
-// export JSON link exists
-check('تصدير JSON', !!clickByText('تصدير البيانات الحالية'))
+// exam create + results
+clickByText('الاختبارات')
+await sleep(600)
+clickByText('إعداد اختبار جديد')
+await sleep(400)
+setInput(mInput('مثال: اختبار الجزء'), 'اختبار smoke2')
+clickByText('إنشاء الاختبار')
+await sleep(600)
+clickByText('تسجيل / تعديل النتائج')
+await sleep(500)
+clickByText('حفظ النتائج وحساب المعدل')
+await sleep(700)
+const ex = db().exams.find((e) => e.results.length)
+check('حساب المعدل والتقدير تلقائياً', !!ex && typeof ex.results[0].total === 'number' && !!ex.results[0].grade)
+
+// certificate issue (teacher)
+clickByText('التكريمات')
+await sleep(600)
+{
+  const cardSelects = [...document.querySelectorAll('select')].slice(1)
+  if (cardSelects[0] && db().students[0]) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set
+    setter.call(cardSelects[0], db().students[0].id)
+    cardSelects[0].dispatchEvent(new window.Event('change', { bubbles: true }))
+    await sleep(300)
+  }
+}
+clickByText('معاينة الشهادة')
+await sleep(700)
+check('canvas الشهادة', document.querySelectorAll('canvas').length > 0)
+clickByText('إصدار الشهادة')
+await sleep(600)
+check('إصدار شهادة في السجل', db().certificates.length === 1)
+
+// teacher profile page
+clickByText('ملفي الشخصي')
+await sleep(700)
+check('صفحة ملف المعلم', text().includes('عدد طلابي') && text().includes('حضور حلقاتي'))
+
+// safe reset: backup + admin notification + clear
+clickByText('لوحة المعلم')
+await sleep(600)
+clickByText('تهيئة البيانات (Safe Reset)')
+await sleep(500)
+clickByText('اضغط مرة أخرى للتأكيد النهائي')
+await sleep(300)
+clickByText('حفظ صامت ثم تهيئة')
+await sleep(1500)
+const d2 = db()
+check('Safe Reset: نسخة احتياطية صامتة', d2.backups.length >= 1)
+check('Safe Reset: إشعار للمدير', d2.notifications.some((n) => n.type === 'reset'))
+check('Safe Reset: تصفير بيانات حلقات المعلم', d2.recitations.length === 0 && d2.exams.length === 0)
+
+// student login -> notification gate modal
+clickByTitle('تسجيل الخروج')
+await sleep(600)
+setInput(loginIdentifier(), schoolCode()) // wrong identifier on purpose? no—use phone of parentless student: use student phone '' -> use school code path instead
+// register student first
+clickByText('إنشاء حساب طالب جديد')
+await sleep(500)
+setInput(mInput('XXXXXX'), schoolCode())
+setInput(mInput('الاسم الكامل'), 'طالب إشعارات')
+setInput(mInput('05xxxxxxxx'), '0500000077')
+setInput(mPassword(), 's12345')
+clickByText('إنشاء الحساب')
+await sleep(700)
+// create absence notification for this student via admin later; here just login
+clickByText('الذهاب لتسجيل الدخول')
+await sleep(500)
+setInput(loginIdentifier(), '0500000077')
+setInput(loginPassword(), 's12345')
+clickByText('دخول')
+await sleep(1500)
+check('دخول الطالب/ولي الأمر (ملف موحد)', text().includes('مسار الحفظ') || text().includes('متابعة الأبناء'))
 
 console.log('\nwindow errors:', window.__errors?.length ? window.__errors : 'none')
 const fails = results.filter(([, ok]) => !ok)
 console.log(`${results.length - fails.length}/${results.length} checks passed`)
-process.exit(fails.length ? 1 : 0)
+process.exit(fails.length || window.__errors?.length ? 1 : 0)

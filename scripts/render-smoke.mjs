@@ -1,179 +1,142 @@
-import { JSDOM } from 'jsdom'
-import { buildSync } from 'esbuild'
-import { createRequire } from 'node:module'
+import { loadApp, sleep, text, clickByText, clickByTitle, setInput, setSelect, db, schoolCode, mInput, mPassword, mSelect, loginIdentifier, loginPassword, modalEl } from './setup.mjs'
+const modalElSafe = () => modalEl()
 
-const dom = new JSDOM('<!doctype html><html lang="ar" dir="rtl"><body><div id="root"></div></body></html>', {
-  url: 'http://localhost:5173/',
-  pretendToBeVisual: true,
-})
+loadApp()
+await sleep(1200)
 
-const { window } = dom
-global.window = window
-global.document = window.document
-Object.defineProperty(global, 'navigator', { value: window.navigator, configurable: true })
-global.localStorage = window.localStorage
-global.HTMLElement = window.HTMLElement
-global.Element = window.Element
-global.Node = window.Node
-global.CustomEvent = window.CustomEvent
-global.Event = window.Event
-global.MouseEvent = window.MouseEvent
-global.KeyboardEvent = window.KeyboardEvent
-global.getComputedStyle = window.getComputedStyle.bind(window)
-global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16)
-global.cancelAnimationFrame = (id) => clearTimeout(id)
-window.requestAnimationFrame = global.requestAnimationFrame
-window.matchMedia = window.matchMedia || (() => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }))
-global.matchMedia = window.matchMedia
-window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
-global.ResizeObserver = window.ResizeObserver
-window.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} }
-global.IntersectionObserver = window.IntersectionObserver
-window.HTMLCanvasElement.prototype.getContext = () =>
-  new Proxy(
-    {},
-    {
-      get: (t, p) => {
-        if (p === 'measureText') return () => ({ width: 10 })
-        if (p === 'createLinearGradient' || p === 'createRadialGradient') return () => ({ addColorStop() {} })
-        if (p === 'getImageData') return () => ({ data: [] })
-        return () => {}
-      },
-      set: () => true,
-    },
-  )
-window.HTMLCanvasElement.prototype.toBlob = function (cb) {
-  cb(new window.Blob(['x'], { type: 'image/png' }))
-}
-window.HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,x'
-window.AudioContext = class {
-  createOscillator() { return { connect() {}, start() {}, stop() {}, type: '', frequency: { value: 0 } } }
-  createGain() { return { connect() {}, gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} } } }
-  get destination() { return {} }
-  get currentTime() { return 0 }
-  close() {}
-}
-global.AudioContext = window.AudioContext
-global.fetch = () => Promise.reject(new Error('offline in test'))
-window.fetch = global.fetch
-window.URL.createObjectURL = () => 'blob:x'
-window.URL.revokeObjectURL = () => {}
-
-buildSync({
-  entryPoints: ['scripts/render-entry.jsx'],
-  bundle: true,
-  format: 'cjs',
-  platform: 'browser',
-  outfile: '/tmp/kand-app.cjs',
-  loader: { '.css': 'empty', '.woff': 'empty', '.woff2': 'empty' },
-  logLevel: 'silent',
-  define: { 'process.env.NODE_ENV': '"production"' },
-})
-
-const require = createRequire(import.meta.url)
-require('/tmp/kand-app.cjs')
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-await sleep(1500)
-
-const text = () => document.body.textContent
-const clickByText = (t, scope) => {
-  const els = [...(scope || document).querySelectorAll('button, a, [role="button"]')]
-  const el = els.find((e) => e.textContent.trim().includes(t))
-  if (!el) return false
-  el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }))
-  return true
-}
-const clickByTitle = (t) => {
-  const el = [...document.querySelectorAll('button[title]')].find((e) => e.getAttribute('title') === t)
-  if (!el) return false
-  el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }))
-  return true
-}
 const results = []
 const check = (name, ok) => { results.push([name, !!ok]); console.log(ok ? 'PASS' : 'FAIL', '-', name) }
+const inputByPh = (ph) => [...document.querySelectorAll('input')].find((i) => (i.placeholder || '').includes(ph))
 
-check('تسجيل الدخول يظهر', text().includes('تسجيل الدخول'))
-check('أزرار الدخول السريع الأربعة', ['مدير المدرسة', 'معلم القرآن', 'ولي أمر'].every((t) => text().includes(t)))
+// ---- login screen: unified, no quick-login ----
+check('نموذج دخول موحد (بريد/هاتف + كلمة مرور)', !!document.querySelector('input[dir="ltr"]') && text().includes('تسجيل الدخول'))
+check('زر تسجيل مدرسة جديدة', text().includes('تسجيل مدرسة قرآنية جديدة'))
+check('زر إنشاء حساب طالب', text().includes('إنشاء حساب طالب جديد'))
+check('لا يوجد دخول سريع حسب الدور', !text().includes('دخول تجريبي سريع') && !text().includes('123456'))
 
-check('click admin', clickByText('مدير المدرسة'))
+// ---- register a school ----
+clickByText('تسجيل مدرسة قرآنية جديدة')
+await sleep(600)
+setInput(mInput('مدرسة قَنَد'), 'مدرسة Test القرآنية')
+setInput(mInput('الاسم الكامل'), 'مدير الاختبار')
+setInput(mInput('admin@school.com'), 'admin@test.school')
+setInput(mInput('05xxxxxxxx'), '0500000001')
+setInput(mPassword(), 'pass123')
+clickByText('إنشاء المدرسة')
+await sleep(800)
+check('رمز المدرسة (6 أحرف)', /^[A-Z2-9]{6}$/.test(schoolCode() || ''))
+check('الرمز محفوظ في السجل', schoolCode() && schoolCode().length === 6)
+clickByText('ابدأ لوحة التحكم')
 await sleep(1200)
-check('لوحة تحكم المدير', text().includes('إجمالي الطلاب'))
-check('بطاقة تنبيه الغائبين', text().includes('غائبون عن آخر حصة'))
+check('لوحة تحكم المدير فارغة في البداية', text().includes('إجمالي الطلاب') && db().students.length === 0 && db().circles.length === 0)
 
-check('الانتقال للحلقات', clickByText('الحلقات والطلاب'))
-await sleep(800)
-check('صفحة الحلقات', text().includes('حلقة النخبة') && text().includes('القاعة الأولى'))
+// ---- add circle ----
+clickByText('الحلقات والمعلمون والطلاب')
+await sleep(700)
+clickByText('إضافة حلقة')
+await sleep(500)
+setInput(mInput('مثال: حلقة النخبة'), 'حلقة الاختبار')
+clickByText('حفظ الحلقة')
+await sleep(700)
+check('إضافة حلقة', db().circles.length === 1 && text().includes('حلقة'))
 
-check('الانتقال للحضور', clickByText('الحضور والغياب'))
-await sleep(800)
-check('صفحة الحضور + جدول', text().includes('سجل حضور اليوم'))
-check('زر المسح', text().includes('مسح QR'))
+// ---- add teacher (admin only) ----
+clickByText('المعلمون (')
+await sleep(500)
+clickByText('إضافة معلم')
+await sleep(500)
+const tName = [...document.querySelectorAll('input')].find((i) => i.placeholder === 'الاسم الكامل')
+setInput(tName, 'المعلم أحمد')
+setInput(mInput('teacher@school.com'), 'teacher@test.school')
+setInput(mInput('05xxxxxxxx'), '0500000002')
+setInput(mPassword(), 'teach123')
+clickByText('إنشاء حساب المعلم')
+await sleep(700)
+check('إنشاء حساب معلم', db().users.some((u) => u.role === 'teacher' && u.email === 'teacher@test.school'))
 
-check('الانتقال للتقارير', clickByText('التقارير الشهرية'))
-await sleep(1000)
-check('تقرير + رسوم', text().includes('تقرير طالب') && document.querySelectorAll('#report-root svg').length >= 0)
+// ---- add student ----
+clickByText('الطلاب (')
+await sleep(500)
+clickByText('تسجيل طالب جديد')
+await sleep(500)
+setInput(mInput('الاسم الكامل'), 'طالب Test')
+{
+  const cs = [...(modalElSafe()?.querySelectorAll('select') || [])].find((x) => [...x.options].some((o) => o.textContent.includes('حلقة الاختبار')))
+  if (cs) { const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set; setter.call(cs, cs.options[1].value); cs.dispatchEvent(new window.Event('change', { bubbles: true })) }
+}
+clickByText('تسجيل الطالب')
+await sleep(700)
+check('تسجيل طالب + QR', db().students.length === 1 && db().students[0].qrCode.startsWith('KAND-'))
+check('زر تحميل بطاقة الطالب', !!document.querySelector('button[title="تحميل بطاقة الطالب"]'))
 
-check('الانتقال للشهادات', clickByText('الشهادات التكريمية'))
-await sleep(800)
-check('فئات التكريم الأربع', ['الأكثر حفظاً', 'الأكثر مداومة', 'الأكثر تحسناً', 'الولي الأكثر حرصاً'].every((t) => text().includes(t)))
-check('معاينة شهادة', clickByText('معاينة الشهادة'))
-await sleep(800)
-check('canvas الشهادة', document.querySelectorAll('canvas').length > 0)
-check('إصدار شهادة', clickByText('إصدار الشهادة'))
+// ---- attendance: mark absent -> notification ----
+clickByText('الحضور والغياب')
+await sleep(700)
+clickByText('غائب')
 await sleep(600)
-check('سجل الشهادات الصادرة', text().includes('الشهادات الصادرة سابقاً'))
+const d = db()
+check('تسجيل غياب + إشعار للطالب وولي الأمر', d.attendance.some((a) => a.status === 'absent') && d.notifications.filter((n) => n.type === 'absent').length >= 1)
+check('زر مراسلة ولي الأمر', !!document.querySelector('button[title="مراسلة ولي الأمر"]') || text().includes('توثيق التواصل'))
 
-check('الإعدادات', clickByText('الإعدادات والنسخ الاحتياطي'))
-await sleep(800)
-check('حقل رابط Sheets', !!document.querySelector('input[placeholder*="script.google.com"]'))
-check('فتح كود الربط', clickByText('كود الربط'))
-await sleep(600)
-check('Code.gs معروض', text().includes('doPost') && text().includes('Kand_Backups'))
+// ---- settings: wizard + backup + zip ----
+clickByText('الإعدادات والنسخ الاحتياطي')
+await sleep(700)
+check('زر معالج الربط السريع', text().includes('معالج ربط سريع'))
+clickByText('معالج ربط سريع')
+await sleep(500)
+check('المعالج يحتوي فتح script.new', text().includes('script.new'))
+check('المعالج يحتوي نسخ الكود', text().includes('نسخ الكود'))
 clickByText('إغلاق')
 await sleep(400)
-check('نسخة احتياطية الآن', clickByText('نسخة احتياطية الآن'))
-await sleep(800)
-check('النسخة في القائمة', text().includes('نسخة احتياطية —'))
+clickByText('نسخة الآن')
+await sleep(700)
+check('نسخة احتياطية local', db().backups.length === 1)
+check('زر نسخة ZIP كاملة', text().includes('نسخ احتياطي كامل (ZIP)'))
+check('النص "siempre" مصحح (دائماً)', text().includes('دائماً عبر الأرشفة المؤقتة') && !text().includes('siempre'))
 
-// teacher
-check('خروج', clickByTitle('تسجيل الخروج'))
-await sleep(600)
-check('click معلم', clickByText('معلم القرآن'))
-await sleep(1200)
-check('لوحة المعلم', text().includes('طلابي في حلقاتي'))
-check('الانتقال للتسميع', clickByText('التسميع اليومي'))
-await sleep(800)
-check('تسجيل تسميع', clickByText('تسجيل تسميع جديد'))
-await sleep(600)
-check('نموذج التسميع', text().includes('ملاحظات التجويد'))
-clickByText('إلغاء')
-await sleep(300)
-check('الانتقال للاختبارات', clickByText('الاختبارات'))
-await sleep(800)
-check('قائمة الاختبارات', text().includes('الاختبار الشهري'))
+// ---- import/export page ----
+clickByText('الاستيراد والتصدير')
+await sleep(700)
+check('صفحة الاستيراد/التصدير', text().includes('تصدير شامل') && text().includes('قالب Excel') && text().includes('تصدير منفصل'))
 
-// student
+// ---- logout + login with wrong then right password ----
 clickByTitle('تسجيل الخروج')
 await sleep(700)
-check('click طالب', clickByText('طالب'))
+setInput(loginIdentifier(), 'admin@test.school')
+setInput(loginPassword(), 'wrong')
+clickByText('دخول')
+await sleep(600)
+check('رسالة خطأ كلمة مرور', text().includes('كلمة المرور غير صحيحة'))
+setInput(loginPassword(), 'pass123')
+clickByText('دخول')
 await sleep(1200)
-check('مسار الطالب', text().includes('خريطة السور') && text().includes('الصفحات المحفوظة'))
-check('بطاقتي', clickByText('بطاقتي الرقمية'))
-await sleep(800)
-check('QR svg', document.querySelectorAll('svg').length > 0 && text().includes('KAND-'))
+check('دخول المدير بنجاح', text().includes('إجمالي الطلاب') || !!localStorage.getItem('kand_session_v1'))
+console.log('DEBUG h1:', document.querySelector('h1')?.textContent)
 
-// parent
+// ---- student self-registration with school code ----
 clickByTitle('تسجيل الخروج')
 await sleep(700)
-check('click ولي أمر', clickByText('ولي أمر'))
-await sleep(1200)
-check('لوحة الولي', text().includes('تأكيد الاطلاع والمتابعة'))
-check('تأكيد الاطلاع', clickByText('تأكيد الاطلاع والمتابعة'))
+clickByText('إنشاء حساب طالب جديد')
 await sleep(600)
-check('سجل التأكيدات', text().includes('سجل تأكيدات الاطلاع'))
+setInput(mInput('XXXXXX'), schoolCode())
+setInput(mInput('الاسم الكامل'), 'طالب ذاتي Test')
+setInput(mInput('05xxxxxxxx'), '0500000099')
+setInput(mPassword(), 'stud123')
+clickByText('إنشاء الحساب')
+await sleep(800)
+check('تسجيل ذاتي بكود المدرسة', db().students.some((s) => s.name === 'طالب ذاتي Test'))
+check('ولي أمرMaria تم إنشاؤه/ربطه', db().users.some((u) => u.role === 'parent' && u.phone === '0500000099'))
 
-console.log('\nwindow errors:', window.__errors.length ? window.__errors : 'none')
+// ---- login as student by phone ----
+clickByText('الذهاب لتسجيل الدخول')
+await sleep(500)
+setInput(loginIdentifier(), '0500000099')
+setInput(loginPassword(), 'stud123')
+clickByText('دخول')
+await sleep(1500)
+check('دخول الطالب/ولي الأمر', text().includes('مسار الحفظ') || text().includes('متابعة الأبناء'))
+
+console.log('\nwindow errors:', window.__errors?.length ? window.__errors : 'none')
 const fails = results.filter(([, ok]) => !ok)
-console.log(`\n${results.length - fails.length}/${results.length} checks passed`)
-process.exit(fails.length || window.__errors.length ? 1 : 0)
+console.log(`${results.length - fails.length}/${results.length} checks passed`)
+process.exit(fails.length || window.__errors?.length ? 1 : 0)

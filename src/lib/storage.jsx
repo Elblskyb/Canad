@@ -1,86 +1,52 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { buildSeed } from './seed'
+import { buildSchoolDb, loadRegistry, saveRegistry, schoolDbKey, REGISTRY_KEY, SESSION_KEY, newSchoolCode, newSchoolId } from './seed'
 import { uid, todayStr } from './helpers'
 
-const LS_KEY = 'kand_db_v1'
-const SESSION_KEY = 'kand_session_v1'
-
-const readLocal = () => {
-  try {
-    const raw = localStorage.getItem(LS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch (e) {
-    /* corrupted storage → reseed */
-  }
-  const seeded = buildSeed()
-  localStorage.setItem(LS_KEY, JSON.stringify(seeded))
-  return seeded
-}
-
-const writeLocal = (db) => {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(db))
-  } catch (e) {
-    /* quota */
-  }
-}
+/* ---------- GAS fetch: إصلاح Failed to fetch عبر redirect follow + text/plain ---------- */
+const gasPost = (url, body) =>
+  fetch(url, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body),
+  })
 
 const withTimeout = (promise, ms) =>
-  Promise.race([
-    promise,
-    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
-  ])
+  Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
 
 export const StorageService = {
-  load: readLocal,
-  save(db) {
-    writeLocal(db)
-    const gasUrl = db?.settings?.gasUrl
-    if (gasUrl) {
-      this.pushRemote(gasUrl, db).catch(() => {})
-    }
+  loadSchool(schoolId) {
+    try {
+      const raw = localStorage.getItem(schoolDbKey(schoolId))
+      if (raw) return JSON.parse(raw)
+    } catch (e) { /* reseed */ }
+    const reg = loadRegistry()
+    const school = reg.schools.find((s) => s.id === schoolId)
+    const db = buildSchoolDb(school || { id: schoolId, name: 'مدرسة' })
+    this.saveSchool(schoolId, db)
+    return db
   },
-  reset() {
-    localStorage.removeItem(LS_KEY)
-    const seeded = buildSeed()
-    writeLocal(seeded)
-    return seeded
+  saveSchool(schoolId, db) {
+    try {
+      localStorage.setItem(schoolDbKey(schoolId), JSON.stringify(db))
+    } catch (e) { /* quota */ }
+    const gasUrl = db?.settings?.gasUrl
+    if (gasUrl) this.pushRemote(gasUrl, db).catch(() => {})
   },
   async fetchRemote(gasUrl) {
-    const res = await withTimeout(
-      fetch(gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'getAll' }),
-      }),
-      6000,
-    )
+    const res = await withTimeout(gasPost(gasUrl, { action: 'getAll' }), 8000)
     const json = await res.json()
-    if (!json || !json.ok || !json.data) throw new Error(json?.error || 'استجابة غير صالحة')
+    if (!json || !json.ok || !json.data) throw new Error(json?.error || 'استجابة غير صالحة من Google Apps Script')
     return json.data
   },
   async pushRemote(gasUrl, db) {
-    const res = await withTimeout(
-      fetch(gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'saveAll', data: db }),
-      }),
-      8000,
-    )
+    const res = await withTimeout(gasPost(gasUrl, { action: 'saveAll', data: db }), 10000)
     const json = await res.json()
-    if (!json || !json.ok) throw new Error(json?.error || 'فشل الدفع')
+    if (!json || !json.ok) throw new Error(json?.error || 'فشل الدفع إلى Sheets')
     return json
   },
   async callRemote(gasUrl, action, payload = {}) {
-    const res = await withTimeout(
-      fetch(gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action, ...payload }),
-      }),
-      15000,
-    )
+    const res = await withTimeout(gasPost(gasUrl, { action, ...payload }), 20000)
     const json = await res.json()
     if (!json || !json.ok) throw new Error(json?.error || 'فشل الطلب')
     return json
@@ -88,38 +54,52 @@ export const StorageService = {
 }
 
 export const getSession = () => {
-  try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')
-  } catch (e) {
-    return null
-  }
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') } catch (e) { return null }
 }
-export const setSession = (s) => {
+export const setSessionRaw = (s) => {
   if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s))
   else localStorage.removeItem(SESSION_KEY)
 }
 
+/* ---------- Session ---------- */
+const SessionContext = createContext(null)
+export function SessionProvider({ children }) {
+  const [session, setSession] = useState(getSession())
+  const set = useCallback((s) => { setSessionRaw(s); setSession(s) }, [])
+  const value = useMemo(() => ({ session, setSession: set }), [session, set])
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+}
+export const useSession = () => useContext(SessionContext)
+
+/* ---------- Store (per school) ---------- */
 const StoreContext = createContext(null)
-const AuthContext = createContext(null)
 
 export function StoreProvider({ children }) {
-  const [db, setDb] = useState(() => StorageService.load())
-  const [remoteStatus, setRemoteStatus] = useState('idle')
-
-  const update = useCallback((mutator) => {
-    setDb((prev) => {
-      const next = structuredClone(prev)
-      mutator(next)
-      StorageService.save(next)
-      return next
-    })
-  }, [])
-
-  const reload = useCallback(() => setDb(StorageService.load()), [])
+  const { session } = useSession()
+  const schoolId = session?.schoolId || null
+  const [db, setDb] = useState(() => (schoolId ? StorageService.loadSchool(schoolId) : null))
+  const [remoteStatus, setRemoteStatus] = useState('local')
 
   useEffect(() => {
-    const gasUrl = db.settings?.gasUrl
-    if (!gasUrl) {
+    setDb(schoolId ? StorageService.loadSchool(schoolId) : null)
+  }, [schoolId])
+
+  const update = useCallback(
+    (mutator) => {
+      setDb((prev) => {
+        if (!prev || !schoolId) return prev
+        const next = structuredClone(prev)
+        mutator(next)
+        StorageService.saveSchool(schoolId, next)
+        return next
+      })
+    },
+    [schoolId],
+  )
+
+  useEffect(() => {
+    const gasUrl = db?.settings?.gasUrl
+    if (!gasUrl || !schoolId) {
       setRemoteStatus('local')
       return
     }
@@ -127,33 +107,29 @@ export function StoreProvider({ children }) {
     StorageService.fetchRemote(gasUrl)
       .then((remote) => {
         setDb((prev) => {
-          const merged = { ...remote, settings: { ...remote.settings, gasUrl } }
-          writeLocal(merged)
+          const merged = { ...remote, settings: { ...remote.settings, gasUrl, schoolId } }
+          StorageService.saveSchool(schoolId, merged)
           return merged
         })
         setRemoteStatus('gas')
       })
       .catch(() => setRemoteStatus('local-fallback'))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db.settings?.gasUrl])
+  }, [db?.settings?.gasUrl, schoolId])
 
-  const mode = db.settings?.gasUrl ? 'gas' : 'local'
-
-  const value = useMemo(
-    () => ({
+  const value = useMemo(() => {
+    if (!db) return { db: null, update: () => {}, ready: false }
+    return {
       db,
+      ready: true,
       update,
-      reload,
-      mode,
+      mode: db.settings?.gasUrl ? 'gas' : 'local',
       remoteStatus,
       setGasUrl(url) {
-        update((d) => {
-          d.settings.gasUrl = url.trim()
-        })
+        update((d) => { d.settings.gasUrl = url.trim() })
       },
       testConnection: async (url) => {
         try {
-          await StorageService.fetchRemote(url)
+          await StorageService.fetchRemote(url.trim())
           return { ok: true }
         } catch (e) {
           return { ok: false, error: e.message }
@@ -161,19 +137,10 @@ export function StoreProvider({ children }) {
       },
       backupNow: async () => {
         const snapshot = structuredClone(db)
-        const entry = {
-          id: uid(),
-          name: `نسخة احتياطية — ${todayStr()}`,
-          createdAt: new Date().toISOString(),
-          source: 'local',
-          data: snapshot,
-        }
+        const entry = { id: uid(), name: `نسخة احتياطية — ${todayStr()}`, createdAt: new Date().toISOString(), source: 'local', data: snapshot }
         if (db.settings?.gasUrl) {
           try {
-            const res = await StorageService.callRemote(db.settings.gasUrl, 'backup', {
-              name: entry.name,
-              data: snapshot,
-            })
+            const res = await StorageService.callRemote(db.settings.gasUrl, 'backup', { name: entry.name, data: snapshot })
             entry.driveFileId = res.fileId || null
             entry.source = 'drive'
           } catch (e) {
@@ -181,9 +148,7 @@ export function StoreProvider({ children }) {
             entry.error = e.message
           }
         }
-        update((d) => {
-          d.backups.unshift(entry)
-        })
+        update((d) => { d.backups.unshift(entry) })
         return entry
       },
       listRemoteBackups: async () => {
@@ -194,9 +159,9 @@ export function StoreProvider({ children }) {
       restoreRemoteBackup: async (fileId) => {
         const res = await StorageService.callRemote(db.settings.gasUrl, 'restoreBackup', { fileId })
         const data = res.data
-        setDb((prev) => {
-          const merged = { ...data, settings: { ...data.settings, gasUrl: prev.settings.gasUrl } }
-          writeLocal(merged)
+        setDb(() => {
+          const merged = { ...data, settings: { ...data.settings, gasUrl: db.settings.gasUrl, schoolId } }
+          StorageService.saveSchool(schoolId, merged)
           return merged
         })
         return res
@@ -228,94 +193,136 @@ export function StoreProvider({ children }) {
             d.students = d.students.filter((s) => s.id !== record.id)
             d.attendance = d.attendance.filter((a) => a.studentId !== record.id)
             d.recitations = d.recitations.filter((r) => r.studentId !== record.id)
-            d.exams.forEach((e) => {
-              e.results = e.results.filter((r) => r.studentId !== record.id)
-            })
+            d.exams.forEach((e) => { e.results = e.results.filter((r) => r.studentId !== record.id) })
             d.parentLogs = d.parentLogs.filter((p) => p.studentId !== record.id)
           }
           if (kind === 'circle') {
             d.circles = d.circles.filter((c) => c.id !== record.id)
-            d.students.forEach((s) => {
-              if (s.circleId === record.id) s.circleId = null
-            })
+            d.students.forEach((s) => { if (s.circleId === record.id) s.circleId = null })
           }
           if (kind === 'recitation') d.recitations = d.recitations.filter((r) => r.id !== record.id)
+          if (kind === 'attendance') d.attendance = d.attendance.filter((a) => a.id !== record.id)
+        })
+      },
+      notify: (toUserIds, type, title, body) => {
+        update((d) => {
+          ;[].concat(toUserIds).forEach((uid2) => {
+            d.notifications.push({ id: uid(), to: uid2, type, title, body, createdAt: new Date().toISOString(), read: false })
+          })
+        })
+      },
+      markNotificationsRead: (userId) => {
+        update((d) => {
+          d.notifications.forEach((n) => { if (n.to === userId) n.read = true })
         })
       },
       importJSON: (json) => {
         const data = typeof json === 'string' ? JSON.parse(json) : json
-        if (!data || !Array.isArray(data.students) || !Array.isArray(data.users)) {
-          throw new Error('ملف غير صالح: البنية غير متوقعة')
-        }
-        setDb((prev) => {
-          const merged = { ...data, settings: { ...data.settings, gasUrl: prev.settings?.gasUrl || '' } }
-          writeLocal(merged)
+        if (!data || !Array.isArray(data.students) || !Array.isArray(data.users)) throw new Error('ملف غير صالح: البنية غير متوقعة')
+        setDb(() => {
+          const merged = { ...data, settings: { ...data.settings, gasUrl: db.settings?.gasUrl || '', schoolId } }
+          StorageService.saveSchool(schoolId, merged)
           return merged
         })
       },
-    }),
-    [db, update, reload, mode, remoteStatus],
-  )
+    }
+  }, [db, update, schoolId, remoteStatus])
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }
 
 export function useStore() {
   const ctx = useContext(StoreContext)
-  if (!ctx) throw new Error('useStore must be used within StoreProvider')
+  if (!ctx) throw new Error('useStore within StoreProvider')
   return ctx
 }
 
+/* ---------- Auth ---------- */
+const AuthContext = createContext(null)
+
 export function AuthProvider({ children }) {
   const { db } = useStore()
-  const [session, setSessionState] = useState(getSession())
+  const { session, setSession } = useSession()
 
   const user = useMemo(() => {
-    if (!session) return null
+    if (!session || !db) return null
     return db.users.find((u) => u.id === session.userId) || null
-  }, [session, db.users])
+  }, [session, db])
 
   const login = useCallback(
-    (email, password) => {
-      const u = db.users.find(
-        (x) => x.email.toLowerCase() === String(email).trim().toLowerCase() && x.password === password,
-      )
-      if (!u) return { ok: false, error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' }
-      const s = { userId: u.id, at: new Date().toISOString() }
-      setSession(s)
-      setSessionState(s)
+    (identifier, password) => {
+      const reg = loadRegistry()
+      const id = String(identifier).trim().toLowerCase()
+      const entry = reg.users.find((u) => (u.identifier && u.identifier.toLowerCase() === id) || (u.phone && u.phone.replace(/\D/g, '') === id.replace(/\D/g, '')))
+      if (!entry) return { ok: false, error: 'لا يوجد حساب بهذا البريد أو رقم الهاتف — سجّل مدرسة أو حساب طالب أولاً' }
+      const schoolDb = StorageService.loadSchool(entry.schoolId)
+      const u = schoolDb.users.find((x) => x.id === entry.userId)
+      if (!u || u.password !== password) return { ok: false, error: 'كلمة المرور غير صحيحة' }
+      if (u.status === 'suspended') return { ok: false, error: 'تم إيقاف هذا الحساب — تواصل مع مدير المدرسة' }
+      setSession({ userId: u.id, schoolId: entry.schoolId, at: new Date().toISOString() })
       return { ok: true }
     },
-    [db.users],
+    [setSession],
   )
 
-  const quickLogin = useCallback(
-    (role) => {
-      const order = { admin: 0, teacher: 0, parent: 0, student: 0 }
-      const u = db.users.find((x) => x.role === role && (order[role]++, true))
-      if (!u) return { ok: false, error: 'لا يوجد حساب تجريبي لهذا الدور' }
-      const s = { userId: u.id, at: new Date().toISOString() }
-      setSession(s)
-      setSessionState(s)
-      return { ok: true }
+  const registerSchool = useCallback(
+    ({ schoolName, adminName, identifier, phone, password }) => {
+      const reg = loadRegistry()
+      const id = String(identifier).trim().toLowerCase()
+      if (reg.users.some((u) => u.identifier?.toLowerCase() === id)) return { ok: false, error: 'هذا البريد مسجّل مسبقاً' }
+      const school = { id: newSchoolId(), name: schoolName.trim(), code: newSchoolCode(), createdAt: new Date().toISOString(), adminName: adminName.trim() }
+      const schoolDb = buildSchoolDb(school)
+      const userId = uid()
+      schoolDb.users.push({ id: userId, name: adminName.trim(), email: id, phone: phone || '', password, role: 'admin', status: 'active', photo: '', createdAt: new Date().toISOString() })
+      reg.schools.push(school)
+      reg.users.push({ schoolId: school.id, userId, identifier: id, phone: phone || '', role: 'admin', name: adminName.trim() })
+      saveRegistry(reg)
+      StorageService.saveSchool(school.id, schoolDb)
+      setSession({ userId, schoolId: school.id, at: new Date().toISOString() })
+      return { ok: true, school }
     },
-    [db.users],
+    [setSession],
   )
 
-  const logout = useCallback(() => {
-    setSession(null)
-    setSessionState(null)
-  }, [])
+  const registerStudent = useCallback(
+    ({ code, name, birthDate, parentName, parentPhone, password, photo }) => {
+      const reg = loadRegistry()
+      const school = reg.schools.find((s) => s.code === String(code).trim().toUpperCase())
+      if (!school) return { ok: false, error: 'رمز المدرسة غير صحيح — اطلب الرمز من مدير المدرسة' }
+      const schoolDb = StorageService.loadSchool(school.id)
+      const phoneDigits = String(parentPhone || '').replace(/\D/g, '')
+      let parent = schoolDb.users.find((u) => u.role === 'parent' && u.phone && u.phone.replace(/\D/g, '') === phoneDigits)
+      let parentId
+      if (parent) {
+        parentId = parent.id
+      } else {
+        parentId = uid()
+        schoolDb.users.push({ id: parentId, name: parentName.trim(), email: '', phone: parentPhone, password, role: 'parent', status: 'active', photo: '', createdAt: new Date().toISOString() })
+        reg.users.push({ schoolId: school.id, userId: parentId, identifier: '', phone: parentPhone, role: 'parent', name: parentName.trim() })
+      }
+      const sid = 'stu-' + uid().slice(3, 10)
+      const userId = 'usr-' + sid
+      schoolDb.users.push({ id: userId, name: name.trim(), email: '', phone: '', password, role: 'student', status: 'active', studentId: sid, photo: photo || '', createdAt: new Date().toISOString() })
+      reg.users.push({ schoolId: school.id, userId, identifier: '', phone: phoneDigits, role: 'student', name: name.trim() })
+      schoolDb.students.push({ id: sid, userId, name: name.trim(), birthDate: birthDate || '', circleId: null, parentId, qrCode: `KAND-${sid.toUpperCase()}`, photo: photo || '', joinedAt: todayStr(), createdAt: new Date().toISOString() })
+      saveRegistry(reg)
+      StorageService.saveSchool(school.id, schoolDb)
+      return { ok: true, school }
+    },
+    [],
+  )
+
+  const logout = useCallback(() => setSession(null), [setSession])
 
   const value = useMemo(
-    () => ({ session, user, login, quickLogin, logout }),
-    [session, user, login, quickLogin, logout],
+    () => ({ session, user, login, registerSchool, registerStudent, logout }),
+    [session, user, login, registerSchool, registerStudent, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+  if (!ctx) throw new Error('useAuth within AuthProvider')
   return ctx
 }

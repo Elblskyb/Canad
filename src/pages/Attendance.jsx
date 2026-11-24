@@ -4,6 +4,7 @@ import { useStore, useAuth } from '../lib/storage'
 import { useToast } from '../components/ui'
 import { Card, CardTitle, Badge, Empty, Table, Tabs } from '../components/ui'
 import { QRScannerModal } from '../components/qr'
+import { ContactParentModal } from '../components/contact'
 import { absenteesOfLastSession, lastSessionDate, circleById, userById, parentOf } from '../lib/analytics'
 import { todayStr, fmtDate, uid, cx } from '../lib/helpers'
 
@@ -21,6 +22,7 @@ export default function Attendance() {
   const [scannerOpen, setScannerOpen] = useState(false)
   const [flash, setFlash] = useState(null)
   const [contactNote, setContactNote] = useState({})
+  const [contact, setContact] = useState(null)
 
   const myCircles = user.role === 'admin' ? db.circles : db.circles.filter((c) => c.teacherId === user.id)
   const [circleId, setCircleId] = useState(myCircles[0]?.id)
@@ -52,6 +54,13 @@ export default function Attendance() {
           scannedAt: status === 'present' || status === 'late' ? new Date().toISOString() : null,
         })
       }
+      if (status === 'absent') {
+        const su = d.users.find((u) => u.studentId === student.id)
+        d.notifications.push(
+          { id: uid(), to: su?.id || student.userId, type: 'absent', title: 'تسجيل غياب', body: `تم تسجيل غياب ${student.name} في حلقة ${circle.name} بتاريخ ${today}`, createdAt: new Date().toISOString(), read: false },
+          { id: uid(), to: student.parentId, type: 'absent', title: 'غياب ابنكم', body: `تم تسجيل غياب ${student.name} في حلقة ${circle.name} بتاريخ ${today}`, createdAt: new Date().toISOString(), read: false },
+        )
+      }
     })
   }
 
@@ -76,9 +85,12 @@ export default function Attendance() {
         reportDate: today,
         confirmedAt: new Date().toISOString(),
       })
+      const su = d.users.find((u) => u.studentId === student.id)
+      d.notifications.push({ id: uid(), to: parent?.id || 'unknown', type: 'call', title: 'استدعاء ولي الأمر', body: `استدعاء ولي أمر ${student.name} (${student.name}) بسبب الغياب في حلقة ${circle.name}`, createdAt: new Date().toISOString(), read: false })
     })
     setContactNote((n) => ({ ...n, [student.id]: true }))
-    toast(`تم توثيق التواصل مع ${parent?.name || 'ولي أمر'} ${parent?.phone ? '— ' + parent.phone : ''}`)
+    setContact({ student, parent, circle })
+    toast(`تم فتح نافذة المراسلة مع ${parent?.name || 'ولي الأمر'}`)
   }
 
   const statusOf = (sid) => todayRecords.find((a) => a.studentId === sid)?.status
@@ -123,7 +135,7 @@ export default function Attendance() {
                     <td className="td">{st ? <Badge tone={STATUS[st].tone}>{STATUS[st].label}</Badge> : <span className="text-xs text-muted">لم يُسجل بعد</span>}</td>
                     <td className="td text-xs text-muted tabular-nums">{rec?.scannedAt ? new Date(rec.scannedAt).toLocaleTimeString('en-GB') : '—'}</td>
                     <td className="td">
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 items-center">
                         {Object.entries(STATUS).map(([k, v]) => (
                           <button
                             key={k}
@@ -136,6 +148,15 @@ export default function Attendance() {
                             {v.label}
                           </button>
                         ))}
+                        {rec && (user.role === 'admin' || circle.teacherId === user.id) && (
+                          <button
+                            className="icon-btn !w-7 !h-7 hover:!text-danger hover:!border-danger/40"
+                            title="حذف سجل الحضور (ينتقل إلى الأرشيف)"
+                            onClick={() => deleteRecord('attendance', rec)}
+                          >
+                            <XCircle size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -192,6 +213,17 @@ export default function Attendance() {
       </div>
 
       <QRScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} students={allStudents} onScan={onScan} circleFilter={circle?.id} />
+
+      <ContactParentModal
+        open={!!contact}
+        onClose={() => setContact(null)}
+        student={contact?.student}
+        circleName={contact?.circle?.name}
+        parentPhone={contact?.parent?.phone}
+        parentName={contact?.parent?.name}
+        type="absent"
+        detail={`آخر حصة: ${fmtDate(absentees.date || today)}`}
+      />
     </div>
   )
 }

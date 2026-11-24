@@ -1,51 +1,32 @@
-# كند — مدرسة القرآن الكريم
+# قَنَد — نظام إدارة المدارس القرآنية
 
-تطبيق ويب عربي كامل (RTL) لإدارة مدرسة قرآنية: React 18 + Vite + Tailwind CSS + lucide-react + Recharts + react-qr-code + html5-qrcode + jsPDF.
+تطبيق ويب + أندرويد (Capacitor) عربي بالكامل (RTL)، **Multi-Tenant** (لكل مدرسة schoolId ورمز خاص)، **Offline-First** مع مزامنة سحابية مجانية اختيارية (Google Apps Script أو Firebase Spark).
 
-## التشغيل
-
+## التشغيل (ويب)
 ```bash
 npm install
 npm run dev        # http://127.0.0.1:5173
-npm run build      # build إنتاج إلى dist/
-npm run test:smoke # فحص آلي (jsdom) يغطي الأدوار الأربعة والتدفقات الأساسية
+npm run build      # dist/ (webDir لتطبيق Android)
+npm run test:smoke # 40 فحص jsdom
 ```
 
-## الحسابات التجريبية (كلمة المرور: 123456)
-
-| الدور | البريد |
-|---|---|
-| مدير المدرسة | admin@kand.school |
-| معلم القرآن | teacher@kand.school |
-| طالب | student1@kand.school |
-| ولي أمر | parent@kand.school |
-
-أو استخدم أزرار «دخول تجريبي سريع» في صفحة الدخول.
+## الأندرويد (APK)
+```bash
+npm run build && npx cap sync android
+cd android && ./gradlew assembleDebug   # android/app/build/outputs/apk/debug/app-debug.apk
+```
+أو CI تلقائي: `.github/workflows/build-apk.yml` يبني APK ويرفعه كـ artifact عند كل push لـ main (مع توليد الأيقونات من `assets/icon.png`).
 
 ## البنية
+- تسجيل مدرسة جديدة → إنشاء حساب مدير + **رمز مدرسة (School Code)**؛ المعلمون يُنشأون حصراً من لوحة المدير؛ الطلاب يسجّلون ذاتياً برمز المدرسة + هاتف ولي الأمر + صورة.
+- دخول موحد (بريد/هاتف + كلمة مرور) يكتشف المدرسة والدور تلقائياً.
+- حضور عبر QR (كاميرا خلفية + إذن صريح + بدائل يدوية)، إشعارات داخل التطبيق (Modal إلزامي للطالب/ولي الأمر) + Push عبر Capacitor، مراسلة ولي الأمر عبر واتساب/SMS.
+- تسميع/اختبارات/تقارير/شهادات تكريمية، نسخ احتياطي ZIP كامل + JSON + Drive، استيراد/تصدير Excel، بطاقة طالب قابلة للطباعة، تهيئة آمنة للمعلم (نسخة صامتة + إشعار مدير قبل التصفير).
+- حذف آمن عبر الأرشيف المؤقت (تأكيد مزدوج).
 
+## ملفات رئيسية
 ```
-src/
-  lib/
-    storage.jsx    # StorageService (LocalStorage ←→ Google Apps Script) + المصادقة وصلاحيات RBAC
-    seed.js        # بيانات تجريبية عربية واقعية
-    gas.js         # كود Code.gs الجاهز للنسخ (Sheets + Drive + Kand_Backups)
-    analytics.js   # إحصائيات، تنبيه الغائبين، محرك المرشحين للتكريم
-    cert.js        # توليد الشهادات التكريمية على Canvas (PNG/PDF)
-    helpers.js
-  components/      # ui.jsx, layout.jsx (sidebar/shريط سفلي), qr.jsx (بطاقة + ماسح)
-  pages/           # Login, dashboards, Circles, Attendance, Recitations, Exams, Reports, Certificates, Settings, MyQR
+src/lib        storage.jsx (multi-tenant + GAS), seed.js, gas.js (Code.gs), excel.js, zipbackup.js, contact.js, push.js, photo.js, studentcard.js, cert.js, analytics.js
+src/pages      Login, dashboards, Circles, Attendance, Recitations, Exams, Reports, Certificates, Settings, ImportExport, Profile, MyQR
+android/       مشروع Capacitor (أذونات CAMERA + POST_NOTIFICATIONS + queries لواتساب/SMS)
 ```
-
-## أوضاع التخزين
-
-1. **LocalStorage + بيانات تجريبية** — يعمل فوراً عند أول تشغيل.
-2. **Google Apps Script** — من «الإعدادات ← الربط الحي»: ألصق رابط Web App واختبر الاتصال. زر «كود الربط (Code.gs)» يعرض الكود جاهزاً للنسخ — ينشئ الجداول تلقائياً (Users, Circles, Students, Attendance, Recitations, Exams, ParentLogs...) مع نسخ احتياطي إلى Google Drive (مجلد Kand_Backups) واستعادتها.
-
-## الأدوار الأربعة (RBAC)
-
-مدير المدرسة / معلم القرآن / طالب / ولي أمر — كل واجهة بصلاحياتها: مسح QR للحضور، تنبيه الغائبين عن آخر حصة، التسميع اليومي، الاختبارات بمعدل وتقدير تلقائي، تقارير شهرية (Recharts) قابلة للطباعة و PDF، محرك الشهادات التكريمية (4 فئات، تحميل PNG أو PDF)، ولوحة ولي الأمر مع «تأكيد الاطلاع والمتابعة».
-
-## حذف آمن
-
-لا يوجد حذف نهائي: كل حذف (طالب / حلقة / تسميع / نسخة احتياطية) ينتقل إلى «الأرشيف المؤقت» مع تأكيد مزدوج، ويمكن استعادته من صفحة الإعدادات.

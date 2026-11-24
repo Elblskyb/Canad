@@ -8,8 +8,9 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
 } from 'recharts'
 import { useStore, useAuth } from '../lib/storage'
-import { Card, CardTitle, Stat, Badge, Empty, Tabs } from '../components/ui'
+import { Card, CardTitle, Stat, Badge, Empty, Tabs, Modal, ConfirmDialog } from '../components/ui'
 import { StudentQRCard } from '../components/qr'
+import { useToast } from '../components/ui'
 import {
   absenteesOfLastSession, attendanceRate, studentProgress, examResultsOf,
   lastSessionDate, circleMonthly, computeAwardCandidates, monthlySeries, userById, circleById,
@@ -37,7 +38,7 @@ export function AdminDashboard({ go }) {
     ? Math.round((todayAtt.filter((a) => a.status === 'present' || a.status === 'late').length / todayAtt.length) * 100)
     : 0
   const monthRecs = db.recitations.filter((r) => r.date >= month + '-01')
-  const avgScore = monthRecs.length ? Math.round(monthRecs.reduce((a, r) => a + r.score, 0) / monthRecs.length) : 0
+  const avgScore = monthRecs.length ? Math.round((monthRecs.reduce((a, r) => a + r.score, 0) / monthRecs.length) * 10) / 10 : 0
 
   const absentees = db.circles
     .map((c) => ({ circle: c, ...absenteesOfLastSession(db, c.id) }))
@@ -190,12 +191,36 @@ function RecentActivity({ db }) {
 
 /* ================= TEACHER ================= */
 export function TeacherDashboard({ go }) {
-  const { db } = useStore()
+  const { db, update, backupNow, notify } = useStore()
   const { user } = useAuth()
+  const toast = useToast()
+  const [safeReset, setSafeReset] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const myCircles = db.circles.filter((c) => c.teacherId === user.id)
   const myCircleIds = myCircles.map((c) => c.id)
   const myStudents = db.students.filter((s) => myCircleIds.includes(s.circleId))
   const today = todayStr()
+
+  const doSafeReset = async () => {
+    setResetting(true)
+    try {
+      await backupNow()
+      const admin = db.users.find((u) => u.role === 'admin')
+      if (admin) {
+        notify(admin.id, 'reset', 'تهيئة بيانات', `قام المعلم ${user.name} بتهيئة بيانات حلقاته. تم حفظ نسخة احتياطية صامتة أولاً.`)
+      }
+      update((d) => {
+        d.recitations = d.recitations.filter((r) => !myCircleIds.includes(r.circleId))
+        d.attendance = d.attendance.filter((a) => !myCircleIds.includes(a.circleId))
+        d.exams = d.exams.filter((e) => !myCircleIds.includes(e.circleId))
+      })
+      toast('تمت تهيئة البيانات بعد حفظ نسخة احتياطية صامتة وإشعار مدير المدرسة')
+    } catch (e) {
+      toast('تعذر التهيئة: ' + e.message, 'error')
+    }
+    setResetting(false)
+    setSafeReset(false)
+  }
 
   const absentees = myCircles.map((c) => ({ circle: c, ...absenteesOfLastSession(db, c.id) })).filter((x) => x.students.length)
   const month = monthKey(today)
@@ -206,7 +231,7 @@ export function TeacherDashboard({ go }) {
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 grid grid-cols-2 xl:grid-cols-4 gap-4">
         <Stat icon={Users} label="طلابي في حلقاتي" value={myStudents.length} hint={myCircles.map((c) => c.name).join('، ')} tone="accent" />
-        <Stat icon={BookOpen} label="جلسات التسميع هذا الشهر" value={myRecs.length} hint={`بمتوسط ${myRecs.length ? Math.round(myRecs.reduce((a, r) => a + r.score, 0) / myRecs.length) : 0}/10`} tone="bronze" />
+        <Stat icon={BookOpen} label="جلسات التسميع هذا الشهر" value={myRecs.length} hint={`بمتوسط ${myRecs.length ? Math.round((myRecs.reduce((a, r) => a + r.score, 0) / myRecs.length) * 10) / 10 : 0}/10`} tone="bronze" />
         <Stat icon={CalendarCheck} label="متوسط حضور حلقاتي" value={avgRate(db, myStudents, month)} tone="teal" />
         <Stat icon={AlertTriangle} label="غائبون عن آخر حصة" value={absentees.reduce((a, x) => a + x.students.length, 0)} tone="danger" />
       </div>
@@ -216,7 +241,19 @@ export function TeacherDashboard({ go }) {
         <button className="btn-ghost" onClick={() => go('recitations')}><BookOpen size={16} /> إدخال التسميع اليومي</button>
         <button className="btn-ghost" onClick={() => go('exams')}><ScanLine size={16} /> إعداد اختبار جديد</button>
         <button className="btn-bronze" onClick={() => go('certificates')}><Award size={16} /> تكريم المتميزين</button>
+        <button className="btn-danger" onClick={() => setSafeReset(true)}>تهيئة البيانات (Safe Reset)</button>
       </div>
+
+      <ConfirmDialog
+        open={safeReset}
+        onClose={() => setSafeReset(false)}
+        title="تهيئة بيانات حلقاتك"
+        message="سيتم أولاً رفع نسخة احتياطية كاملة صامتة (إلى Drive إن وُجد ربط، وإلا محلياً)، ثم إشعار مدير المدرسة، وبعد نجاح الحفظ فقط يتم تصفير سجلات التسميع والحضور والاختبارات الخاصة بحلقاتك."
+        confirmLabel={resetting ? 'جارٍ الحفظ الصامت...' : 'حفظ صامت ثم تهيئة'}
+        danger
+        requireDouble
+        onConfirm={doSafeReset}
+      />
 
       {absentees.length > 0 && (
         <Card className="col-span-12 border-danger/30 bg-danger/5">

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ScanLine, BarChart3, Award, Settings, BookOpen,
-  GraduationCap, QrCode, Menu, X, Sun, Moon, LogOut, ChevronRight, Landmark,
+  GraduationCap, QrCode, Menu, X, Sun, Moon, LogOut, ChevronRight, Landmark, FileSpreadsheet, UserCircle,
 } from 'lucide-react'
 import { cx } from '../lib/helpers'
 import { useAuth } from '../lib/storage'
@@ -9,10 +9,11 @@ import { useAuth } from '../lib/storage'
 export const NAV = {
   admin: [
     { key: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
-    { key: 'circles', label: 'الحلقات والطلاب', icon: Users },
+    { key: 'circles', label: 'الحلقات والمعلمون والطلاب', icon: Users },
     { key: 'attendance', label: 'الحضور والغياب', icon: ScanLine },
     { key: 'reports', label: 'التقارير الشهرية', icon: BarChart3 },
     { key: 'certificates', label: 'الشهادات التكريمية', icon: Award },
+    { key: 'importexport', label: 'الاستيراد والتصدير', icon: FileSpreadsheet },
     { key: 'settings', label: 'الإعدادات والنسخ الاحتياطي', icon: Settings },
   ],
   teacher: [
@@ -20,8 +21,10 @@ export const NAV = {
     { key: 'attendance', label: 'تسجيل الحضور', icon: ScanLine },
     { key: 'recitations', label: 'التسميع اليومي', icon: BookOpen },
     { key: 'exams', label: 'الاختبارات', icon: GraduationCap },
+    { key: 'mystudents', label: 'طلابي', icon: Users },
     { key: 'reports', label: 'التقارير الشهرية', icon: BarChart3 },
     { key: 'certificates', label: 'التكريمات', icon: Award },
+    { key: 'profile', label: 'ملفي الشخصي', icon: UserCircle },
   ],
   student: [
     { key: 'dashboard', label: 'مسار الحفظ', icon: LayoutDashboard },
@@ -149,7 +152,7 @@ export function Shell({ active, onNavigate, title, subtitle, children, headerAct
               <Menu size={17} />
             </button>
             <div className="min-w-0 flex-1">
-              <h1 className="font-amiri text-xl md:text-2xl font-bold truncate leading-8">{title}</h1>
+              <h1 className="font-amiri text-xl md:text-2xl font-bold leading-9 break-words">{title}</h1>
               {subtitle && <p className="text-xs text-muted truncate -mt-0.5">{subtitle}</p>}
             </div>
             <div className="flex items-center gap-2">

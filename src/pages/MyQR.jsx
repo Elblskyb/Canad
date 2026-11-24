@@ -1,13 +1,16 @@
-import React from 'react'
-import { QrCode } from 'lucide-react'
+import React, { useRef } from 'react'
+import { QrCode, FileDown } from 'lucide-react'
 import { useStore, useAuth } from '../lib/storage'
-import { Card, CardTitle, Empty } from '../components/ui'
+import { useToast, Card, CardTitle, Empty } from '../components/ui'
 import { StudentQRCard } from '../components/qr'
 import { circleById } from '../lib/analytics'
+import { drawStudentCard, studentCardPNG } from '../lib/studentcard'
 
 export default function MyQR() {
   const { db } = useStore()
   const { user } = useAuth()
+  const toast = useToast()
+  const cardRef = useRef(null)
   const student = db.students.find((s) => s.id === user.studentId || s.userId === user.id)
   if (!student) {
     return (
@@ -28,6 +31,26 @@ export default function MyQR() {
         </div>
       </Card>
       <StudentQRCard student={{ ...student, circleName: circle?.name }} schoolName={db.settings.schoolName} />
+      <canvas ref={cardRef} className="hidden" />
+      <button
+        className="btn-bronze"
+        onClick={() => {
+          const canvas = cardRef.current
+          const qrSvg = document.querySelector('svg')?.outerHTML || null
+          drawStudentCard(canvas, {
+            photo: student.photo || user.photo,
+            name: student.name,
+            schoolName: db.settings.schoolName,
+            circleName: circle?.name,
+            qrSvg,
+            qrCode: student.qrCode,
+          })
+          studentCardPNG(canvas, `بطاقة-${student.name}.png`)
+          toast('تم تحميل بطاقة الطالب للطباعة')
+        }}
+      >
+        <FileDown size={16} /> تحميل بطاقة الطالب (صورة قابلة للطباعة)
+      </button>
     </div>
   )
 }

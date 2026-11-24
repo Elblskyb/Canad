@@ -109,6 +109,7 @@ export function QRScannerModal({ open, onClose, students, onScan, circleFilter }
   const [manual, setManual] = useState('')
   const [error, setError] = useState('')
   const [cameraOn, setCameraOn] = useState(false)
+  const [retry, setRetry] = useState(0)
   const scannerRef = useRef(null)
   const boxRef = useRef(null)
   const handledRef = useRef(new Set())
@@ -141,6 +142,11 @@ export function QRScannerModal({ open, onClose, students, onScan, circleFilter }
     let cancelled = false
     const start = async () => {
       try {
+        // طلب إذن الكاميرا صراحةً أولاً (مطلوب في Android WebView)
+        if (navigator.mediaDevices?.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          stream.getTracks().forEach((t) => t.stop())
+        }
         const el = boxRef.current
         if (!el) return
         const scanner = new Html5Qrcode(el.id)
@@ -159,8 +165,13 @@ export function QRScannerModal({ open, onClose, students, onScan, circleFilter }
         if (!cancelled) setCameraOn(true)
       } catch (e) {
         if (!cancelled) {
-          setError('تعذّر الوصول إلى الكاميرا — استخدم الإدخال اليدوي أو المسح السريع أدناه')
-          setMode('manual')
+          const denied = e && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError' || /permission/i.test(String(e.message || e)))
+          setError(
+            denied
+              ? 'تم رفض إذن الكاميرا — فعّله من إعدادات التطبيق/المتصف ثم أعد المحاولة، أو استخدم الإدخال اليدوي أو المسح السريع.'
+              : 'تعذّر الوصول إلى الكاميرا — استخدم الإدخال اليدوي أو المسح السريع أدناه',
+          )
+          if (!denied) setMode('manual')
         }
       }
     }
@@ -169,7 +180,7 @@ export function QRScannerModal({ open, onClose, students, onScan, circleFilter }
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mode, cameraOn])
+  }, [open, mode, cameraOn, retry])
 
   const handleCode = (code) => {
     const student = students.find((s) => s.qrCode === code.trim())
@@ -222,7 +233,14 @@ export function QRScannerModal({ open, onClose, students, onScan, circleFilter }
             className={cx('w-full max-w-sm rounded-2xl overflow-hidden border-2 border-accent/50 animate-scanPulse bg-black [&>video]:w-full [&>video]:object-cover', !cameraOn && 'hidden')}
           />
           {!cameraOn && !error && <p className="text-sm text-muted py-8">جارٍ تشغيل الكاميرا...</p>}
-          {error && <p className="text-sm text-danger bg-danger/10 border border-danger/25 rounded-xl px-4 py-3 w-full">{error}</p>}
+          {error && (
+            <div className="w-full flex flex-col gap-2">
+              <p className="text-sm text-danger bg-danger/10 border border-danger/25 rounded-xl px-4 py-3">{error}</p>
+              <button className="btn-ghost !py-2 !text-xs" onClick={() => { setError(''); setRetry((r) => r + 1) }}>
+                إعادة محاولة طلب إذن الكاميرا
+              </button>
+            </div>
+          )}
           <button className="btn-ghost !py-2 !text-xs" onClick={stopCamera}>
             <CameraOff size={14} /> إيقاف الكاميرا
           </button>

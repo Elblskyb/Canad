@@ -31,6 +31,10 @@ jobs:
       - name: Build web app
         run: npm run build
 
+      - name: Generate Android app icons from assets/icon.png (optional)
+        continue-on-error: true
+        run: npx capacitor-assets generate --android
+
       - name: Capacitor sync (android)
         run: npx cap sync android
 
